@@ -574,6 +574,18 @@ export const PublicLayout: React.FC<{ children: React.ReactNode }> = ({ children
               Always verify eligibility, dates, and fee details from the official government notification before applying.
             </p>
           </div>
+
+          {/* Subtle Made in India Signature Line */}
+          <div className="mt-5 pt-4 border-t border-white/10 flex flex-col items-center justify-center gap-1.5 text-center">
+            <div className="inline-flex items-center gap-2 text-[11px] font-medium tracking-wider text-white/60">
+              <span className="inline-flex items-center overflow-hidden rounded-[1px] border border-white/20 shrink-0" aria-hidden="true">
+                <span className="w-2 h-2.5 bg-[#FF7A00]" />
+                <span className="w-2 h-2.5 bg-white" />
+                <span className="w-2 h-2.5 bg-[#138A36]" />
+              </span>
+              <span>Made in India · Dedicated to Indian Aspirants</span>
+            </div>
+          </div>
         </div>
       </footer>
 
