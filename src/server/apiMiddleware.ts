@@ -146,7 +146,24 @@ function loadServerStore(): ServerCMSStore {
   try {
     if (fs.existsSync(STORE_FILE)) {
       const raw = fs.readFileSync(STORE_FILE, 'utf-8');
-      return JSON.parse(raw) as ServerCMSStore;
+      const parsed = JSON.parse(raw) as ServerCMSStore;
+      if (Array.isArray(parsed.posts)) {
+        parsed.posts = parsed.posts.map((p, idx) => ({
+          ...p,
+          id: p.id || p.slug || `post-${idx}`,
+          title: (p.title || '').replace(/\s*\(Demo Sample\)/gi, '').replace(/\s*\(Demo\)/gi, '').trim(),
+          summary: (p.summary || '').replace(/^\[DEMO DATA\]\s*/i, '').trim(),
+          content: (p.content || '').replace(/<div class="notice-info">.*?<\/div>\s*/gis, ''),
+          isDemo: false,
+        }));
+      }
+      if (Array.isArray(parsed.categories)) {
+        parsed.categories = parsed.categories.map((c, idx) => ({
+          ...c,
+          id: c.id || `${c.type === 'section' ? 'sec' : 'dom'}-${c.slug || idx}`,
+        }));
+      }
+      return parsed;
     }
   } catch (e) {
     console.error('Failed to read server store, initializing defaults:', e);
@@ -494,7 +511,7 @@ ${urlsXml}
   }
 
   // Public Contact Form Submission (with Rate Limiting & Validation)
-  if (pathname === '/api/public/contact' && method === 'POST') {
+  if ((pathname === '/api/public/contact' || pathname === '/api/contact') && method === 'POST') {
     const rate = checkRateLimit(contactRateLimit, clientIp, 5, 10 * 60 * 1000);
     if (!rate.allowed) {
       sendJson(res, 429, {
@@ -544,7 +561,7 @@ ${urlsXml}
   }
 
   // Public Anonymous Analytics Event
-  if (pathname === '/api/public/analytics' && method === 'POST') {
+  if ((pathname === '/api/public/analytics' || pathname === '/api/analytics/track') && method === 'POST') {
     try {
       const body = await readJsonBody(req);
       const eventType = String(body.eventType || '').trim();

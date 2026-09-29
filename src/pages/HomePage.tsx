@@ -369,10 +369,10 @@ export const HomePage: React.FC = () => {
                   {jobsAndClosingSoon.length === 0 ? (
                     <p className="p-4 text-xs text-[#64748B]">No active job postings yet.</p>
                   ) : (
-                    jobsAndClosingSoon.map((post) => {
+                    jobsAndClosingSoon.map((post, idx) => {
                       const st = computePostStatus(post, settings.closingSoonThresholdDays);
                       return (
-                        <div key={post.id} className="p-3.5 hover:bg-[#F6F8FB] transition-colors">
+                        <div key={post.id || `${post.slug}-${idx}`} className="p-3.5 hover:bg-[#F6F8FB] transition-colors">
                           <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-[#64748B] font-mono-tabular">
                             <span>
                               <strong className="text-[#071A3D] font-sans">{post.organization}</strong>{' '}
@@ -421,10 +421,10 @@ export const HomePage: React.FC = () => {
                   {resultsAndKeys.length === 0 ? (
                     <p className="p-4 text-xs text-[#64748B]">No result declarations yet.</p>
                   ) : (
-                    resultsAndKeys.map((post) => {
+                    resultsAndKeys.map((post, idx) => {
                       const st = computePostStatus(post, settings.closingSoonThresholdDays);
                       return (
-                        <div key={post.id} className="p-3.5 hover:bg-[#F6F8FB] transition-colors">
+                        <div key={post.id || `${post.slug}-${idx}`} className="p-3.5 hover:bg-[#F6F8FB] transition-colors">
                           <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-[#64748B] font-mono-tabular">
                             <span>
                               <strong className="text-[#071A3D] font-sans">{post.organization}</strong>{' '}
@@ -473,10 +473,10 @@ export const HomePage: React.FC = () => {
                   {admitCardsAndSyllabus.length === 0 ? (
                     <p className="p-4 text-xs text-[#64748B]">No admit card updates yet.</p>
                   ) : (
-                    admitCardsAndSyllabus.map((post) => {
+                    admitCardsAndSyllabus.map((post, idx) => {
                       const st = computePostStatus(post, settings.closingSoonThresholdDays);
                       return (
-                        <div key={post.id} className="p-3.5 hover:bg-[#F6F8FB] transition-colors">
+                        <div key={post.id || `${post.slug}-${idx}`} className="p-3.5 hover:bg-[#F6F8FB] transition-colors">
                           <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-[#64748B] font-mono-tabular">
                             <span>
                               <strong className="text-[#071A3D] font-sans">{post.organization}</strong>{' '}
@@ -552,9 +552,9 @@ export const HomePage: React.FC = () => {
             >
               All Commissions ({publishedPosts.length})
             </button>
-            {domainCategories.map((org) => (
+            {domainCategories.map((org, idx) => (
               <button
-                key={org.id}
+                key={org.id || `${org.slug}-${idx}`}
                 type="button"
                 role="tab"
                 aria-selected={selectedOrg === org.name}
@@ -608,8 +608,8 @@ export const HomePage: React.FC = () => {
           ) : (
             <>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {filteredFeed.slice(0, visibleCount).map((post) => (
-                  <UpdateCard key={post.id} post={post} />
+                {filteredFeed.slice(0, visibleCount).map((post, idx) => (
+                  <UpdateCard key={post.id || `${post.slug}-${idx}`} post={post} />
                 ))}
               </div>
 

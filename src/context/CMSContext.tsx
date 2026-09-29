@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import {
   collection,
   doc,
@@ -105,6 +105,7 @@ interface CMSContextValue {
     website_hp?: string;
   }) => Promise<{ ok: boolean; error?: string }>;
   updateContactMessageStatus: (msgId: string, status: ContactSubmission['status']) => Promise<void>;
+  deleteContactMessage: (msgId: string) => Promise<void>;
   purgeDemoContent: () => Promise<number>;
   restoreDemoContent: () => Promise<void>;
   refreshData: () => Promise<void>;
@@ -115,12 +116,15 @@ const CMSContext = createContext<CMSContextValue | undefined>(undefined);
 const STORAGE_KEYS = {
   BOOKMARKS: 'cai_saved_bookmarks_v2',
   SEARCHES: 'cai_recent_searches_v2',
-  CACHE: 'cai_cms_cache_v3',
+  CACHE: 'cai_cms_cache_v4',
 };
 
-function cleanLegacyDemoPost(p: Post): Post {
+function cleanLegacyDemoPost(p: Post, fallbackId?: string): Post {
+  const resolvedId =
+    p.id || fallbackId || p.slug || `post-${Math.random().toString(36).slice(2, 9)}`;
   return {
     ...p,
+    id: resolvedId,
     title: (p.title || '').replace(/\s*\(Demo Sample\)/gi, '').replace(/\s*\(Demo\)/gi, '').trim(),
     summary: (p.summary || '').replace(/^\[DEMO DATA\]\s*/i, '').trim(),
     content: (p.content || '').replace(/<div class="notice-info">.*?<\/div>\s*/gis, ''),
@@ -130,15 +134,102 @@ function cleanLegacyDemoPost(p: Post): Post {
   };
 }
 
+function normalizePosts(rawPosts: Post[]): Post[] {
+  const seenIds = new Set<string>();
+  const seenSlugs = new Set<string>();
+  const out: Post[] = [];
+  rawPosts.forEach((raw, idx) => {
+    const cleaned = cleanLegacyDemoPost(raw, raw.id || raw.slug || `post-${idx}`);
+    let uniqueId = cleaned.id;
+    if (seenIds.has(uniqueId)) {
+      uniqueId = `${uniqueId}-${idx}`;
+    }
+    if (cleaned.slug && seenSlugs.has(cleaned.slug) && seenIds.has(cleaned.id)) {
+      return;
+    }
+    seenIds.add(uniqueId);
+    if (cleaned.slug) seenSlugs.add(cleaned.slug);
+    out.push({ ...cleaned, id: uniqueId });
+  });
+  return out;
+}
+
+function normalizeCategories(rawCats: CategoryItem[]): CategoryItem[] {
+  const seenIds = new Set<string>();
+  const seenTypeSlugs = new Set<string>();
+  const out: CategoryItem[] = [];
+  rawCats.forEach((c, idx) => {
+    const resolvedId = c.id || `${c.type === 'section' ? 'sec' : 'dom'}-${c.slug || idx}`;
+    const typeSlugKey = `${c.type}:${c.slug}`;
+    if (seenTypeSlugs.has(typeSlugKey)) {
+      return;
+    }
+    let uniqueId = resolvedId;
+    if (seenIds.has(uniqueId)) {
+      uniqueId = `${uniqueId}-${idx}`;
+    }
+    seenIds.add(uniqueId);
+    seenTypeSlugs.add(typeSlugKey);
+    out.push({ ...c, id: uniqueId });
+  });
+  return out;
+}
+
 export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [posts, setPosts] = useState<Post[]>(INITIAL_POSTS);
-  const [categories, setCategories] = useState<CategoryItem[]>(INITIAL_CATEGORIES);
-  const [settings, setSettings] = useState<SiteSettings>(DEFAULT_SITE_SETTINGS);
-  const [media, setMedia] = useState<MediaLibraryItem[]>(INITIAL_MEDIA);
-  const [auditLogs, setAuditLogs] = useState<AuditLogRecord[]>(INITIAL_AUDIT_LOGS);
-  const [revisions, setRevisions] = useState<RevisionRecord[]>(INITIAL_REVISIONS);
-  const [contactMessages, setContactMessages] = useState<ContactSubmission[]>([]);
+  const [posts, setPostsState] = useState<Post[]>(INITIAL_POSTS);
+  const [categories, setCategoriesState] = useState<CategoryItem[]>(INITIAL_CATEGORIES);
+  const [settings, setSettingsState] = useState<SiteSettings>(DEFAULT_SITE_SETTINGS);
+  const [media, setMediaState] = useState<MediaLibraryItem[]>(INITIAL_MEDIA);
+  const [auditLogs, setAuditLogsState] = useState<AuditLogRecord[]>(INITIAL_AUDIT_LOGS);
+  const [revisions, setRevisionsState] = useState<RevisionRecord[]>(INITIAL_REVISIONS);
+  const [contactMessages, setContactMessagesState] = useState<ContactSubmission[]>([]);
   const [analyticsEvents, setAnalyticsEvents] = useState<AnalyticsEventRecord[]>([]);
+
+  // Synchronous refs so bulk loops and rapid sequential actions never read stale closures
+  const postsRef = useRef<Post[]>(INITIAL_POSTS);
+  const categoriesRef = useRef<CategoryItem[]>(INITIAL_CATEGORIES);
+  const settingsRef = useRef<SiteSettings>(DEFAULT_SITE_SETTINGS);
+  const mediaRef = useRef<MediaLibraryItem[]>(INITIAL_MEDIA);
+  const auditLogsRef = useRef<AuditLogRecord[]>(INITIAL_AUDIT_LOGS);
+  const revisionsRef = useRef<RevisionRecord[]>(INITIAL_REVISIONS);
+  const contactMessagesRef = useRef<ContactSubmission[]>([]);
+
+  const setPosts = useCallback((next: Post[]) => {
+    const normalized = normalizePosts(next);
+    postsRef.current = normalized;
+    setPostsState(normalized);
+  }, []);
+
+  const setCategories = useCallback((next: CategoryItem[]) => {
+    const normalized = normalizeCategories(next);
+    categoriesRef.current = normalized;
+    setCategoriesState(normalized);
+  }, []);
+
+  const setSettings = useCallback((next: SiteSettings) => {
+    settingsRef.current = next;
+    setSettingsState(next);
+  }, []);
+
+  const setMedia = useCallback((next: MediaLibraryItem[]) => {
+    mediaRef.current = next;
+    setMediaState(next);
+  }, []);
+
+  const setAuditLogs = useCallback((next: AuditLogRecord[]) => {
+    auditLogsRef.current = next;
+    setAuditLogsState(next);
+  }, []);
+
+  const setRevisions = useCallback((next: RevisionRecord[]) => {
+    revisionsRef.current = next;
+    setRevisionsState(next);
+  }, []);
+
+  const setContactMessages = useCallback((next: ContactSubmission[]) => {
+    contactMessagesRef.current = next;
+    setContactMessagesState(next);
+  }, []);
 
   const [bookmarks, setBookmarks] = useState<string[]>(() => {
     try {
@@ -185,15 +276,20 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const cached = localStorage.getItem(STORAGE_KEYS.CACHE);
       if (cached) {
         const parsed = JSON.parse(cached);
-        if (Array.isArray(parsed.posts) && parsed.posts.length > 0) setPosts(parsed.posts);
-        if (Array.isArray(parsed.categories) && parsed.categories.length > 0)
+        if (Array.isArray( parsed.posts) && parsed.posts.length > 0) {
+          setPosts(parsed.posts);
+        }
+        if (Array.isArray(parsed.categories) && parsed.categories.length > 0) {
           setCategories(parsed.categories);
-        if (parsed.settings) setSettings(parsed.settings);
+        }
+        if (parsed.settings) {
+          setSettings(parsed.settings);
+        }
       }
     } catch {
       // ignore cache errors
     }
-  }, []);
+  }, [setPosts, setCategories, setSettings]);
 
   const persistCache = useCallback(
     (next: {
@@ -203,16 +299,16 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }) => {
       try {
         const current = {
-          posts: next.posts ?? posts,
-          categories: next.categories ?? categories,
-          settings: next.settings ?? settings,
+          posts: next.posts ?? postsRef.current,
+          categories: next.categories ?? categoriesRef.current,
+          settings: next.settings ?? settingsRef.current,
         };
         localStorage.setItem(STORAGE_KEYS.CACHE, JSON.stringify(current));
       } catch {
         // ignore quota errors
       }
     },
-    [posts, categories, settings]
+    []
   );
 
   // Sync to Server API (/api/cms/sync)
@@ -258,11 +354,13 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (sessionData.authenticated && sessionData.admin) {
           hasServerSession = true;
           setAdminUser({
-            uid: sessionData.admin.uid,
+            uid: 'admin-cookie',
             email: sessionData.admin.email,
             authMode: 'server-cookie',
           });
-          setCsrfToken(sessionData.csrfToken || '');
+          if (sessionData.csrfToken) {
+            setCsrfToken(sessionData.csrfToken);
+          }
         }
       }
 
@@ -277,139 +375,160 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (bootData.settings) {
           setSettings(bootData.settings);
         }
+        if (Array.isArray(bootData.analyticsEvents)) {
+          setAnalyticsEvents(bootData.analyticsEvents);
+        }
         if (hasServerSession) {
           if (Array.isArray(bootData.media)) setMedia(bootData.media);
           if (Array.isArray(bootData.auditLogs)) setAuditLogs(bootData.auditLogs);
           if (Array.isArray(bootData.revisions)) setRevisions(bootData.revisions);
           if (Array.isArray(bootData.contactMessages))
             setContactMessages(bootData.contactMessages);
-          if (Array.isArray(bootData.analyticsEvents))
-            setAnalyticsEvents(bootData.analyticsEvents);
         }
       }
 
-      // 2. Also query Firestore for published posts & global settings
+      // 2. Also query Firestore if online
       try {
-        const postsQuery = query(
-          collection(db, 'posts'),
-          where('status', '==', 'published')
-        );
-        const snap = await getDocs(postsQuery);
-        if (!snap.empty) {
-          const fsPosts = snap.docs.map((d) =>
-            cleanLegacyDemoPost({
-              ...(d.data() as Post),
-              id: d.id,
+        const isCurrentAdmin =
+          auth.currentUser?.email === 'arjunjareda2007@gmail.com' || hasServerSession;
+        const postsCollection = collection(db, 'posts');
+        const postsQuery = isCurrentAdmin
+          ? postsCollection
+          : query(postsCollection, where('status', '==', 'published'));
+
+        const [postsSnap, catsSnap, settingsSnap] = await Promise.all([
+          getDocs(postsQuery),
+          getDocs(collection(db, 'categories')),
+          getDoc(doc(db, 'settings', 'global')),
+        ]);
+
+        if (!postsSnap.empty) {
+          const fsPosts = postsSnap.docs
+            .map((d) => {
+              const raw = d.data() as Post;
+              return cleanLegacyDemoPost({ ...raw, id: raw.id || d.id }, d.id);
             })
-          );
-          setPosts((prev) => {
-            const byId = new Map<string, Post>();
-            prev.forEach((p) => byId.set(p.id, cleanLegacyDemoPost(p)));
-            fsPosts.forEach((p) => byId.set(p.id, cleanLegacyDemoPost(p)));
-            return Array.from(byId.values()).sort(
-              (a, b) =>
-                new Date(b.updatedAt || b.createdAt).getTime() -
-                new Date(a.updatedAt || a.createdAt).getTime()
+            .sort((a, b) =>
+              (b.publishedAt || b.updatedAt || '').localeCompare(
+                a.publishedAt || a.updatedAt || ''
+              )
             );
-          });
+          setPosts(fsPosts);
+          persistCache({ posts: fsPosts });
+        } else if (auth.currentUser?.email === 'arjunjareda2007@gmail.com') {
+          for (const p of INITIAL_POSTS) {
+            await setDoc(doc(db, 'posts', p.id), p).catch(() => {});
+          }
+          for (const c of INITIAL_CATEGORIES) {
+            await setDoc(doc(db, 'categories', c.id), c).catch(() => {});
+          }
+          await setDoc(doc(db, 'settings', 'global'), DEFAULT_SITE_SETTINGS).catch(() => {});
         }
-        const settingsDoc = await getDoc(doc(db, 'settings', 'global'));
-        if (settingsDoc.exists()) {
-          setSettings(settingsDoc.data() as SiteSettings);
+
+        if (!catsSnap.empty) {
+          const fsCats = catsSnap.docs
+            .map((d) => {
+              const raw = d.data() as CategoryItem;
+              return { ...raw, id: raw.id || d.id };
+            })
+            .sort((a, b) => a.order - b.order);
+          setCategories(fsCats);
+          persistCache({ categories: fsCats });
+        }
+
+        if (settingsSnap.exists()) {
+          const fsSettings = settingsSnap.data() as SiteSettings;
+          setSettings(fsSettings);
+          persistCache({ settings: fsSettings });
+        }
+
+        if (auth.currentUser?.email === 'arjunjareda2007@gmail.com') {
+          const [mediaSnap, logsSnap, revsSnap, msgsSnap] = await Promise.all([
+            getDocs(collection(db, 'media')),
+            getDocs(collection(db, 'audit_logs')),
+            getDocs(collection(db, 'revisions')),
+            getDocs(collection(db, 'contact_messages')),
+          ]);
+          if (!mediaSnap.empty) {
+            setMedia(
+              mediaSnap.docs.map((d) => {
+                const raw = d.data() as MediaLibraryItem;
+                return { ...raw, id: raw.id || d.id };
+              })
+            );
+          }
+          if (!logsSnap.empty) {
+            setAuditLogs(
+              logsSnap.docs
+                .map((d) => {
+                  const raw = d.data() as AuditLogRecord;
+                  return { ...raw, id: raw.id || d.id };
+                })
+                .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+            );
+          }
+          if (!revsSnap.empty) {
+            setRevisions(
+              revsSnap.docs
+                .map((d) => {
+                  const raw = d.data() as RevisionRecord;
+                  return { ...raw, id: raw.id || d.id };
+                })
+                .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+            );
+          }
+          if (!msgsSnap.empty) {
+            setContactMessages(
+              msgsSnap.docs
+                .map((d) => {
+                  const raw = d.data() as ContactSubmission;
+                  return { ...raw, id: raw.id || d.id };
+                })
+                .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+            );
+          }
         }
       } catch {
-        // Firestore query optional fallback if empty or offline
+        // Firestore offline or restricted; server bootstrap + local seed keeps app running smoothly
       }
-    } catch (err: any) {
-      console.error('Error refreshing CMS data:', err);
-      setError('We could not refresh the latest updates right now. Showing cached updates.');
+    } catch {
+      setError('Unable to reach server. Displaying cached career updates.');
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [
+    persistCache,
+    setPosts,
+    setCategories,
+    setSettings,
+    setMedia,
+    setAuditLogs,
+    setRevisions,
+    setContactMessages,
+  ]);
 
   useEffect(() => {
     refreshData();
   }, [refreshData]);
 
-  // Listen to Firebase Auth state for verified Google Admin
+  // Listen to Firebase Auth state for Google OAuth Owner Login
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user && user.email?.toLowerCase() === 'arjunjareda2007@gmail.com' && user.emailVerified) {
-        setAdminUser({
-          uid: user.uid,
-          email: user.email,
-          authMode: 'firebase-oauth',
-        });
-        // Sync with server session cookie as well
-        try {
-          const res = await fetch('/api/admin/auth/firebase-sync', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ uid: user.uid, email: user.email }),
+    const unsub = onAuthStateChanged(auth, (user) => {
+      if (user && user.email) {
+        if (user.email === 'arjunjareda2007@gmail.com') {
+          setAdminUser({
+            uid: user.uid,
+            email: user.email,
+            authMode: 'firebase-oauth',
           });
-          if (res.ok) {
-            const data = await res.json();
-            if (data.csrfToken) setCsrfToken(data.csrfToken);
-          }
-        } catch {
-          // ignore
-        }
-
-        // Seed Firestore if empty and admin is logged in via Firebase
-        try {
-          const snap = await getDocs(
-            query(collection(db, 'posts'), where('status', '==', 'published'))
-          );
-          if (snap.empty) {
-            for (const post of INITIAL_POSTS) {
-              await setDoc(doc(db, 'posts', post.id), sanitizeFirestorePostPayload(post));
-            }
-            for (const cat of INITIAL_CATEGORIES) {
-              const { id: _catId, ...catData } = cat;
-              await setDoc(doc(db, 'categories', cat.id), catData);
-            }
-            await setDoc(doc(db, 'settings', 'global'), DEFAULT_SITE_SETTINGS);
-          }
-        } catch {
-          // Non-fatal fallback if Firestore rules are still propagating
+          refreshData();
         }
       }
     });
-    return () => unsubscribe();
-  }, []);
+    return () => unsub();
+  }, [refreshData]);
 
-  // Scheduled Posts Auto-Publish Check
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const now = Date.now();
-      setPosts((prev) => {
-        let changed = false;
-        const updated = prev.map((p) => {
-          if (
-            p.status === 'scheduled' &&
-            p.scheduledFor &&
-            new Date(p.scheduledFor).getTime() <= now
-          ) {
-            changed = true;
-            return {
-              ...p,
-              status: 'published' as const,
-              publishedAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-            };
-          }
-          return p;
-        });
-        if (changed) {
-          syncToServer({ posts: updated });
-        }
-        return changed ? updated : prev;
-      });
-    }, 30000);
-    return () => clearInterval(interval);
-  }, [syncToServer]);
-
+  // Bookmark & Search History helpers
   const toggleBookmark = useCallback(
     (postId: string) => {
       setBookmarks((prev) => {
@@ -421,8 +540,8 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           // ignore
         }
         showToast(
-          exists ? 'Removed from your saved updates.' : 'Saved to your bookmarked updates.',
-          'info'
+          exists ? 'Removed from Saved Updates' : 'Saved to your Bookmarks',
+          exists ? 'info' : 'success'
         );
         return next;
       });
@@ -431,10 +550,10 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   );
 
   const addRecentSearch = useCallback((term: string) => {
-    const clean = term.trim().slice(0, 80);
+    const clean = term.trim();
     if (!clean) return;
     setRecentSearches((prev) => {
-      const next = [clean, ...prev.filter((item) => item.toLowerCase() !== clean.toLowerCase())].slice(
+      const next = [clean, ...prev.filter((t) => t.toLowerCase() !== clean.toLowerCase())].slice(
         0,
         6
       );
@@ -456,43 +575,71 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, []);
 
+  // Analytics Event Tracker
   const trackEvent = useCallback(
     async (
       eventType: AnalyticsEventRecord['eventType'],
       target: string,
       category?: string
     ) => {
-      const cleanTarget = target.trim().slice(0, 250);
-      if (!cleanTarget) return;
-      const newEvent: AnalyticsEventRecord = {
-        id: `ev-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      const evt: AnalyticsEventRecord = {
+        id: `evt-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         eventType,
-        target: cleanTarget,
-        ...(category ? { category: category.slice(0, 100) } : {}),
+        target,
+        category,
         createdAt: new Date().toISOString(),
       };
-      setAnalyticsEvents((prev) => [newEvent, ...prev].slice(0, 500));
-
-      fetch('/api/public/analytics', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ eventType, target: cleanTarget, category }),
-      }).catch(() => {});
-
+      setAnalyticsEvents((prev) => [evt, ...prev].slice(0, 500));
       try {
-        await setDoc(doc(db, 'analyticsEvents', newEvent.id), {
-          eventType: newEvent.eventType,
-          target: newEvent.target,
-          ...(newEvent.category ? { category: newEvent.category } : {}),
-          createdAt: newEvent.createdAt,
+        await fetch('/api/public/analytics', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ eventType, target, category }),
         });
       } catch {
-        // Ignore telemetry write error if offline
+        // ignore offline analytics errors
       }
     },
     []
   );
 
+  // Audit Log helper
+  const appendAuditLog = useCallback(
+    async (
+      action: string,
+      _entityType: string,
+      _entityId: string,
+      entityTitle: string,
+      details?: string
+    ) => {
+      const log: AuditLogRecord = {
+        id: `log-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        adminEmail: adminUser?.email || 'arjunjareda2007@gmail.com',
+        adminUid: adminUser?.uid || 'owner-admin',
+        action,
+        target: entityTitle,
+        details: details || entityTitle,
+        createdAt: new Date().toISOString(),
+      };
+      const nextLogs = [log, ...auditLogsRef.current].slice(0, 300);
+      setAuditLogs(nextLogs);
+      await syncToServer({ auditLogs: nextLogs });
+      if (auth.currentUser) {
+        try {
+          await setDoc(doc(db, 'audit_logs', log.id), log);
+        } catch (err) {
+          try {
+            handleFirestoreError(err, OperationType.WRITE, `audit_logs/${log.id}`);
+          } catch {
+            // logged
+          }
+        }
+      }
+    },
+    [adminUser, setAuditLogs, syncToServer]
+  );
+
+  // Admin Authentication
   const loginWithCredentials = useCallback(
     async (email: string, password: string): Promise<{ ok: boolean; error?: string }> => {
       try {
@@ -502,20 +649,22 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           body: JSON.stringify({ email, password }),
         });
         const data = await res.json();
-        if (!res.ok || !data.authenticated) {
-          return { ok: false, error: data.error || 'Invalid credentials.' };
+        if (!res.ok) {
+          return { ok: false, error: data.error || 'Authentication failed.' };
         }
         setAdminUser({
-          uid: data.admin.uid,
+          uid: 'admin-cookie',
           email: data.admin.email,
           authMode: 'server-cookie',
         });
-        setCsrfToken(data.csrfToken || '');
+        if (data.csrfToken) {
+          setCsrfToken(data.csrfToken);
+        }
         await refreshData();
-        showToast('Signed in to Career Alert India Admin CMS.', 'success');
+        showToast('Signed in to Career Alert India Owner Portal', 'success');
         return { ok: true };
-      } catch (err: any) {
-        return { ok: false, error: err.message || 'Authentication request failed.' };
+      } catch {
+        return { ok: false, error: 'Network error while connecting to authentication server.' };
       }
     },
     [refreshData, showToast]
@@ -524,373 +673,368 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const loginWithGoogle = useCallback(async (): Promise<{ ok: boolean; error?: string }> => {
     try {
       const cred = await signInWithPopup(auth, googleProvider);
-      const user = cred.user;
-      if (user.email?.toLowerCase() !== 'arjunjareda2007@gmail.com') {
+      const email = cred.user.email || '';
+      if (email !== 'arjunjareda2007@gmail.com') {
         await signOut(auth);
         return {
           ok: false,
-          error: `Account ${user.email} is not authorized as an administrator.`,
+          error: `Google account (${email}) is not authorized for Owner Admin access.`,
         };
       }
       setAdminUser({
-        uid: user.uid,
-        email: user.email,
+        uid: cred.user.uid,
+        email,
         authMode: 'firebase-oauth',
       });
-      await fetch('/api/admin/auth/firebase-sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ uid: user.uid, email: user.email }),
-      });
       await refreshData();
-      showToast('Signed in with Google Admin account.', 'success');
+      showToast('Signed in with Google Owner Account', 'success');
       return { ok: true };
-    } catch (err: any) {
-      return { ok: false, error: err.message || 'Google Sign-In failed or was cancelled.' };
+    } catch (err) {
+      return {
+        ok: false,
+        error: err instanceof Error ? err.message : 'Google Sign-In was cancelled or failed.',
+      };
     }
   }, [refreshData, showToast]);
 
   const logoutAdmin = useCallback(async () => {
     try {
+      await fetch('/api/admin/auth/logout', { method: 'POST' });
+    } catch {
+      // ignore
+    }
+    try {
       if (auth.currentUser) {
         await signOut(auth);
       }
-      await fetch('/api/admin/auth/logout', { method: 'POST' });
     } catch {
       // ignore
     }
     setAdminUser(null);
     setCsrfToken('');
-    showToast('Logged out of Admin CMS.', 'info');
+    showToast('Signed out of Admin Session', 'info');
   }, [showToast]);
 
-  const recordAudit = useCallback(
-    async (action: string, target: string, details?: string) => {
-      const log: AuditLogRecord = {
-        id: `log-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-        adminEmail: adminUser?.email || 'admin@careeralertindia.in',
-        adminUid: adminUser?.uid || 'admin-server-uid',
-        action: action.slice(0, 80),
-        target: target.slice(0, 250),
-        ...(details ? { details: details.slice(0, 500) } : {}),
-        createdAt: new Date().toISOString(),
-      };
-      setAuditLogs((prev) => [log, ...prev]);
-      if (auth.currentUser) {
-        try {
-          await setDoc(doc(db, 'auditLogs', log.id), {
-            adminEmail: log.adminEmail,
-            adminUid: log.adminUid,
-            action: log.action,
-            target: log.target,
-            ...(log.details ? { details: log.details } : {}),
-            createdAt: log.createdAt,
-          });
-        } catch (e) {
-          handleFirestoreError(e, OperationType.WRITE, `auditLogs/${log.id}`);
-        }
-      }
-      return log;
-    },
-    [adminUser]
-  );
-
+  // Post CRUD + Revision + Sanitization + Unique Slug
   const savePost = useCallback(
     async (
       postInput: Partial<Post> & { title: string; category: Post['category'] },
       changeSummary = 'Updated post content and metadata'
     ): Promise<Post> => {
-      const nowIso = new Date().toISOString();
-      const existingPost = postInput.id ? posts.find((p) => p.id === postInput.id) : undefined;
-      const cleanSlug =
-        generateSlug(postInput.slug || postInput.title) || `update-${Date.now()}`;
-      const id = existingPost?.id || postInput.id || cleanSlug;
+      const now = new Date().toISOString();
+      const currentPosts = postsRef.current;
+      const existingIndex = postInput.id
+        ? currentPosts.findIndex((p) => p.id === postInput.id)
+        : -1;
+      const existing = existingIndex >= 0 ? currentPosts[existingIndex] : null;
 
-      const sanitizedPost: Post = {
-        id,
-        title: postInput.title.trim().slice(0, 250),
-        slug: cleanSlug,
+      // Generate unique slug
+      let baseSlug = generateSlug(postInput.slug || postInput.title);
+      if (!baseSlug) baseSlug = `update-${Date.now()}`;
+      let finalSlug = baseSlug;
+      let counter = 2;
+      while (
+        currentPosts.some(
+          (p) => p.slug === finalSlug && (!existing || p.id !== existing.id)
+        )
+      ) {
+        finalSlug = `${baseSlug}-${counter}`;
+        counter++;
+      }
+
+      // Sanitize links & HTML content
+      const cleanLinks = (postInput.importantLinks ?? existing?.importantLinks ?? [])
+        .map((l) => ({
+          ...l,
+          label: l.label.trim(),
+          url: sanitizeUrl(l.url),
+        }))
+        .filter((l) => l.label && l.url);
+
+      const newStatus = postInput.status ?? existing?.status ?? 'published';
+
+      const savedPost: Post = {
+        id: existing?.id || postInput.id || `post-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        title: postInput.title.trim(),
+        slug: finalSlug,
         category: postInput.category,
-        subcategory: (postInput.subcategory || '').trim().slice(0, 120),
-        organization: (postInput.organization || 'Other').trim().slice(0, 120),
-        state: (postInput.state || 'All India').trim().slice(0, 80),
-        summary: (postInput.summary || postInput.title).trim().slice(0, 1000),
-        content: sanitizeHtml(postInput.content || ''),
-        status: postInput.status || 'draft',
-        badge: postInput.badge || 'NONE',
-        featured: Boolean(postInput.featured),
-        isDemo: Boolean(postInput.isDemo),
-        featuredImage: sanitizeUrl(postInput.featuredImage),
-        qualification: (postInput.qualification || '').trim().slice(0, 150),
-        jobType: (postInput.jobType || '').trim().slice(0, 100),
-        totalVacancies: Number(postInput.totalVacancies) || 0,
-        location: (postInput.location || 'All India').trim().slice(0, 150),
-        salary: (postInput.salary || '').trim().slice(0, 300),
-        applicationStart: (postInput.applicationStart || '').trim().slice(0, 40),
-        applicationEnd: (postInput.applicationEnd || '').trim().slice(0, 40),
-        examDate: (postInput.examDate || '').trim().slice(0, 80),
-        admitCardDate: (postInput.admitCardDate || '').trim().slice(0, 80),
-        resultDate: (postInput.resultDate || '').trim().slice(0, 80),
-        resultStatus: postInput.resultStatus || 'none',
-        answerKeyType: postInput.answerKeyType || 'none',
-        objectionDeadline: (postInput.objectionDeadline || '').trim().slice(0, 80),
-        officialSourceUrl: sanitizeUrl(postInput.officialSourceUrl),
-        statusOverride: (postInput.statusOverride || '').trim().slice(0, 80),
-        importantDates: (postInput.importantDates || []).slice(0, 20),
-        vacancies: (postInput.vacancies || []).slice(0, 30),
-        eligibility: postInput.eligibility || {
-          education: '',
-          ageMin: '',
-          ageMax: '',
-          ageRelaxation: '',
-          nationality: 'Citizen of India',
-        },
-        fees: (postInput.fees || []).slice(0, 15),
-        selectionProcess: (postInput.selectionProcess || []).slice(0, 15),
-        howToApply: (postInput.howToApply || []).slice(0, 15),
-        importantLinks: (postInput.importantLinks || [])
-          .map((l) => ({
-            ...l,
-            url: sanitizeUrl(l.url),
-          }))
-          .filter((l) => l.label.trim().length > 0 && l.url.length > 0)
-          .slice(0, 15),
-        faqs: (postInput.faqs || []).slice(0, 15),
-        syllabusSections: (postInput.syllabusSections || []).slice(0, 20),
-        seoTitle: (postInput.seoTitle || postInput.title).trim().slice(0, 160),
-        seoDescription: (postInput.seoDescription || postInput.summary || '')
-          .trim()
-          .slice(0, 320),
-        canonicalUrl: sanitizeUrl(postInput.canonicalUrl),
-        ogImage: sanitizeUrl(postInput.ogImage),
-        tags: (postInput.tags || []).map((t) => String(t).trim()).filter(Boolean).slice(0, 15),
-        authorUid: existingPost?.authorUid || adminUser?.uid || 'admin-server-uid',
-        scheduledFor: (postInput.scheduledFor || '').trim().slice(0, 50),
+        subcategory: postInput.subcategory ?? existing?.subcategory ?? 'central-govt-jobs',
+        state: postInput.state ?? existing?.state ?? 'All India',
+        organization: (postInput.organization ?? existing?.organization ?? 'Government of India').trim(),
+        summary: (postInput.summary ?? existing?.summary ?? '').trim(),
+        content: sanitizeHtml(postInput.content ?? existing?.content ?? ''),
+        featuredImage: postInput.featuredImage ?? existing?.featuredImage ?? '',
+        featured: Boolean(postInput.featured ?? existing?.featured ?? false),
+        status: newStatus,
+        badge: postInput.badge ?? existing?.badge ?? 'NONE',
+        isDemo: false,
+        totalVacancies:
+          typeof postInput.totalVacancies === 'number'
+            ? postInput.totalVacancies
+            : existing?.totalVacancies ?? 0,
+        qualification: postInput.qualification ?? existing?.qualification ?? 'Graduate',
+        jobType: postInput.jobType ?? existing?.jobType ?? 'Permanent Government Job',
+        salary: postInput.salary ?? existing?.salary ?? '',
+        location: postInput.location ?? existing?.location ?? 'All India',
+        applicationStart: postInput.applicationStart ?? existing?.applicationStart ?? '',
+        applicationEnd: postInput.applicationEnd ?? existing?.applicationEnd ?? '',
+        examDate: postInput.examDate ?? existing?.examDate ?? '',
+        admitCardDate: postInput.admitCardDate ?? existing?.admitCardDate ?? '',
+        resultDate: postInput.resultDate ?? existing?.resultDate ?? '',
+        resultStatus: postInput.resultStatus ?? existing?.resultStatus ?? 'none',
+        answerKeyType: postInput.answerKeyType ?? existing?.answerKeyType ?? 'none',
+        objectionDeadline: postInput.objectionDeadline ?? existing?.objectionDeadline ?? '',
+        statusOverride: postInput.statusOverride ?? existing?.statusOverride ?? '',
+        officialSourceUrl: sanitizeUrl(
+          postInput.officialSourceUrl ?? existing?.officialSourceUrl ?? ''
+        ),
+        importantDates: postInput.importantDates ?? existing?.importantDates ?? [],
+        fees: postInput.fees ?? existing?.fees ?? [],
+        eligibility: postInput.eligibility ??
+          existing?.eligibility ?? {
+            education: '',
+            ageMin: '',
+            ageMax: '',
+            ageRelaxation: '',
+            nationality: 'Indian Citizen',
+          },
+        vacancies: postInput.vacancies ?? existing?.vacancies ?? [],
+        selectionProcess: postInput.selectionProcess ?? existing?.selectionProcess ?? [],
+        howToApply: postInput.howToApply ?? existing?.howToApply ?? [],
+        importantLinks: cleanLinks,
+        faqs: postInput.faqs ?? existing?.faqs ?? [],
+        syllabusSections: postInput.syllabusSections ?? existing?.syllabusSections ?? [],
+        tags: postInput.tags ?? existing?.tags ?? [],
+        seoTitle: (postInput.seoTitle || postInput.title).trim(),
+        seoDescription: (postInput.seoDescription || postInput.summary || '').trim(),
+        canonicalUrl: postInput.canonicalUrl ?? existing?.canonicalUrl ?? '',
+        ogImage: postInput.ogImage ?? existing?.ogImage ?? '',
+        scheduledFor: postInput.scheduledFor ?? existing?.scheduledFor ?? '',
         publishedAt:
-          postInput.status === 'published'
-            ? existingPost?.publishedAt || nowIso
-            : existingPost?.publishedAt || '',
-        createdAt: existingPost?.createdAt || nowIso,
-        updatedAt: nowIso,
+          newStatus === 'published'
+            ? existing?.publishedAt || postInput.publishedAt || now
+            : existing?.publishedAt || '',
+        updatedAt: now,
+        createdAt: existing?.createdAt || now,
+        authorUid: adminUser?.uid || existing?.authorUid || 'owner-admin',
       };
 
-      const nextPosts = existingPost
-        ? posts.map((p) => (p.id === id ? sanitizedPost : p))
-        : [sanitizedPost, ...posts];
-
-      // Create Revision Record
-      const revRecord: RevisionRecord = {
-        id: `rev-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-        postId: id,
-        postTitle: sanitizedPost.title,
-        changedBy: adminUser?.email || 'admin@careeralertindia.in',
-        changeSummary: existingPost ? changeSummary : 'Created post record',
-        snapshot: {
-          title: sanitizedPost.title,
-          slug: sanitizedPost.slug,
-          category: sanitizedPost.category,
-          organization: sanitizedPost.organization,
-          summary: sanitizedPost.summary,
-          content: sanitizedPost.content,
-          status: sanitizedPost.status,
-          applicationEnd: sanitizedPost.applicationEnd,
-          examDate: sanitizedPost.examDate,
-          totalVacancies: sanitizedPost.totalVacancies,
-          importantDates: sanitizedPost.importantDates,
-          importantLinks: sanitizedPost.importantLinks,
-        },
-        createdAt: nowIso,
-      };
-
-      const nextRevisions = [revRecord, ...revisions];
-      const auditAction = !existingPost
-        ? `Created (${sanitizedPost.status})`
-        : sanitizedPost.status === 'published' && existingPost.status !== 'published'
-        ? 'Published Post'
-        : 'Edited Post';
-
-      const newLog = await recordAudit(auditAction, sanitizedPost.title, changeSummary);
-      const nextLogs = [newLog, ...auditLogs];
+      const nextPosts =
+        existingIndex >= 0
+          ? currentPosts.map((p, idx) => (idx === existingIndex ? savedPost : p))
+          : [savedPost, ...currentPosts];
 
       setPosts(nextPosts);
-      setRevisions(nextRevisions);
       persistCache({ posts: nextPosts });
 
-      await syncToServer({
-        posts: nextPosts,
-        revisions: nextRevisions,
-        auditLogs: nextLogs,
-      });
+      // Save revision snapshot
+      const newRevision: RevisionRecord = {
+        id: `rev-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        postId: savedPost.id,
+        postTitle: savedPost.title,
+        snapshot: savedPost as unknown as Record<string, unknown>,
+        changedBy: adminUser?.email || 'arjunjareda2007@gmail.com',
+        createdAt: now,
+        changeSummary,
+      };
+      const nextRevisions = [newRevision, ...revisionsRef.current].slice(0, 200);
+      setRevisions(nextRevisions);
+
+      await syncToServer({ posts: nextPosts, revisions: nextRevisions });
 
       if (auth.currentUser) {
         try {
-          await setDoc(doc(db, 'posts', id), sanitizeFirestorePostPayload(sanitizedPost));
-          await setDoc(doc(db, 'revisions', revRecord.id), {
-            postId: revRecord.postId,
-            postTitle: revRecord.postTitle,
-            changedBy: revRecord.changedBy,
-            changeSummary: revRecord.changeSummary,
-            snapshot: revRecord.snapshot,
-            createdAt: revRecord.createdAt,
-          });
-        } catch (e) {
-          handleFirestoreError(e, OperationType.WRITE, `posts/${id}`);
+          await setDoc(doc(db, 'posts', savedPost.id), savedPost);
+          await setDoc(doc(db, 'revisions', newRevision.id), newRevision);
+        } catch (err) {
+          try {
+            handleFirestoreError(err, OperationType.WRITE, `posts/${savedPost.id}`);
+          } catch {
+            // logged
+          }
         }
       }
 
+      await appendAuditLog(
+        existing ? (newStatus === 'published' ? 'publish' : 'update') : 'create',
+        'post',
+        savedPost.id,
+        savedPost.title,
+        changeSummary
+      );
+
       showToast(
-        sanitizedPost.status === 'published'
-          ? 'Update published live and timestamp updated.'
-          : `Saved as ${sanitizedPost.status}.`,
+        existing ? `Updated "${savedPost.title}"` : `Created "${savedPost.title}"`,
         'success'
       );
-      return sanitizedPost;
+      return savedPost;
     },
-    [posts, revisions, auditLogs, adminUser, recordAudit, persistCache, syncToServer, showToast]
+    [
+      adminUser,
+      appendAuditLog,
+      persistCache,
+      setPosts,
+      setRevisions,
+      showToast,
+      syncToServer,
+    ]
   );
 
   const duplicatePost = useCallback(
     async (postId: string): Promise<Post | null> => {
-      const source = posts.find((p) => p.id === postId);
-      if (!source) return null;
-      const suffix = Math.random().toString(36).slice(2, 6);
-      const newSlug = `${source.slug}-copy-${suffix}`.slice(0, 140);
-      const newPost = await savePost(
+      const target = postsRef.current.find((p) => p.id === postId);
+      if (!target) return null;
+      const copy = await savePost(
         {
-          ...source,
-          id: newSlug,
-          title: `${source.title} (Copy)`.slice(0, 250),
-          slug: newSlug,
+          ...target,
+          id: undefined,
+          title: `${target.title} (Copy)`,
+          slug: `${target.slug}-copy`,
           status: 'draft',
           featured: false,
-          publishedAt: '',
         },
-        `Duplicated from ${source.slug}`
+        `Duplicated from ${target.title}`
       );
-      showToast('Created safe draft duplicate.', 'success');
-      return newPost;
+      return copy;
     },
-    [posts, savePost, showToast]
+    [savePost]
   );
 
   const deleteOrArchivePost = useCallback(
     async (postId: string, permanent = false) => {
-      const target = posts.find((p) => p.id === postId);
+      const currentPosts = postsRef.current;
+      const target = currentPosts.find((p) => p.id === postId);
       if (!target) return;
 
       if (!permanent && target.status !== 'archived') {
-        await savePost({ ...target, status: 'archived' }, 'Moved post to Archive');
-        showToast('Post archived safely.', 'info');
+        const archived: Post = {
+          ...target,
+          status: 'archived',
+          updatedAt: new Date().toISOString(),
+        };
+        const nextPosts = currentPosts.map((p) => (p.id === postId ? archived : p));
+        setPosts(nextPosts);
+        persistCache({ posts: nextPosts });
+        await syncToServer({ posts: nextPosts });
+        if (auth.currentUser) {
+          await setDoc(doc(db, 'posts', postId), archived).catch(() => {});
+        }
+        await appendAuditLog('archive', 'post', postId, target.title, 'Moved post to archive');
+        showToast(`Archived "${target.title}"`, 'info');
         return;
       }
 
-      const nextPosts = posts.filter((p) => p.id !== postId);
+      const nextPosts = currentPosts.filter((p) => p.id !== postId);
       setPosts(nextPosts);
       persistCache({ posts: nextPosts });
-      const log = await recordAudit('Deleted Post Permanently', target.title);
-      await syncToServer({ posts: nextPosts, auditLogs: [log, ...auditLogs] });
-
+      await syncToServer({ posts: nextPosts });
       if (auth.currentUser) {
         try {
           await deleteDoc(doc(db, 'posts', postId));
-        } catch (e) {
-          handleFirestoreError(e, OperationType.DELETE, `posts/${postId}`);
+        } catch (err) {
+          try {
+            handleFirestoreError(err, OperationType.DELETE, `posts/${postId}`);
+          } catch {
+            // logged
+          }
         }
       }
-      showToast('Post permanently deleted.', 'info');
+      await appendAuditLog('delete', 'post', postId, target.title, 'Permanently deleted post');
+      showToast(`Deleted "${target.title}"`, 'info');
     },
-    [posts, auditLogs, savePost, persistCache, recordAudit, syncToServer, showToast]
+    [appendAuditLog, persistCache, setPosts, showToast, syncToServer]
   );
 
   const restoreRevision = useCallback(
     async (revisionId: string) => {
-      const rev = revisions.find((r) => r.id === revisionId);
+      const rev = revisionsRef.current.find((r) => r.id === revisionId);
       if (!rev) return;
-      const target = posts.find((p) => p.id === rev.postId);
-      if (!target) {
-        showToast('Original post record not found.', 'error');
-        return;
+      try {
+        const snapshot = rev.snapshot as unknown as Post;
+        await savePost(
+          {
+            ...snapshot,
+            updatedAt: new Date().toISOString(),
+          },
+          `Restored revision from ${new Date(rev.createdAt).toLocaleString('en-IN')}`
+        );
+        showToast(`Restored revision for "${snapshot.title}"`, 'success');
+      } catch {
+        showToast('Failed to parse revision snapshot', 'error');
       }
-      const snap = rev.snapshot as Partial<Post>;
-      await savePost(
-        {
-          ...target,
-          ...snap,
-          id: target.id,
-          title: snap.title || target.title,
-          category: (snap.category as Post['category']) || target.category,
-        },
-        `Restored revision from ${new Date(rev.createdAt).toLocaleString('en-IN')}`
-      );
-      showToast('Revision restored successfully.', 'success');
     },
-    [revisions, posts, savePost, showToast]
+    [savePost, showToast]
   );
 
+  // Category CRUD & Reordering
   const saveCategory = useCallback(
     async (catInput: Partial<CategoryItem> & { name: string; type: CategoryItem['type'] }) => {
-      const nowIso = new Date().toISOString();
-      const existing = catInput.id ? categories.find((c) => c.id === catInput.id) : undefined;
-      const slug = generateSlug(catInput.slug || catInput.name);
-      const id = existing?.id || catInput.id || `cat-${slug}-${Date.now().toString(36)}`;
+      const now = new Date().toISOString();
+      const currentCategories = categoriesRef.current;
+      const existingIndex = catInput.id
+        ? currentCategories.findIndex((c) => c.id === catInput.id)
+        : -1;
+      const existing = existingIndex >= 0 ? currentCategories[existingIndex] : null;
 
-      const item: CategoryItem = {
-        id,
-        name: catInput.name.trim().slice(0, 80),
+      const slug = generateSlug(catInput.slug || catInput.name);
+      const savedCat: CategoryItem = {
+        id: existing?.id || catInput.id || `cat-${Date.now()}`,
+        name: catInput.name.trim(),
         slug,
-        description: (catInput.description || '').trim().slice(0, 300),
         type: catInput.type,
-        order: existing?.order ?? catInput.order ?? categories.length + 1,
-        enabled: catInput.enabled ?? true,
-        createdAt: existing?.createdAt || nowIso,
-        updatedAt: nowIso,
+        description: (catInput.description ?? existing?.description ?? '').trim(),
+        order:
+          typeof catInput.order === 'number'
+            ? catInput.order
+            : existing?.order ?? currentCategories.length + 1,
+        enabled: catInput.enabled ?? existing?.enabled ?? true,
+        createdAt: existing?.createdAt || now,
+        updatedAt: now,
       };
 
-      const nextCategories = existing
-        ? categories.map((c) => (c.id === id ? item : c))
-        : [...categories, item];
+      const nextCats =
+        existingIndex >= 0
+          ? currentCategories.map((c, idx) => (idx === existingIndex ? savedCat : c))
+          : [...currentCategories, savedCat];
 
-      setCategories(nextCategories);
-      persistCache({ categories: nextCategories });
-      const log = await recordAudit(
-        existing ? 'Updated Category' : 'Created Category',
-        item.name
-      );
-      await syncToServer({ categories: nextCategories, auditLogs: [log, ...auditLogs] });
+      setCategories(nextCats);
+      persistCache({ categories: nextCats });
+      await syncToServer({ categories: nextCats });
 
       if (auth.currentUser) {
-        try {
-          await setDoc(doc(db, 'categories', id), item);
-        } catch (e) {
-          handleFirestoreError(e, OperationType.WRITE, `categories/${id}`);
-        }
+        await setDoc(doc(db, 'categories', savedCat.id), savedCat).catch(() => {});
       }
-      showToast(`Category "${item.name}" saved.`, 'success');
+
+      await appendAuditLog(
+        existing ? 'update' : 'create',
+        'category',
+        savedCat.id,
+        savedCat.name,
+        `Saved ${savedCat.type} category`
+      );
+      showToast(`Saved category "${savedCat.name}"`, 'success');
     },
-    [categories, auditLogs, persistCache, recordAudit, syncToServer, showToast]
+    [appendAuditLog, persistCache, setCategories, showToast, syncToServer]
   );
 
   const reorderCategory = useCallback(
     async (categoryId: string, direction: 'up' | 'down') => {
-      const target = categories.find((c) => c.id === categoryId);
-      if (!target) return;
-      const sameType = categories
-        .filter((c) => c.type === target.type)
-        .sort((a, b) => a.order - b.order);
-      const idx = sameType.findIndex((c) => c.id === categoryId);
+      const sorted = [...categoriesRef.current].sort((a, b) => a.order - b.order);
+      const idx = sorted.findIndex((c) => c.id === categoryId);
+      if (idx < 0) return;
       const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
-      if (swapIdx < 0 || swapIdx >= sameType.length) return;
+      if (swapIdx < 0 || swapIdx >= sorted.length) return;
 
-      const neighbor = sameType[swapIdx];
-      const nextCategories = categories.map((c) => {
-        if (c.id === target.id) return { ...c, order: neighbor.order };
-        if (c.id === neighbor.id) return { ...c, order: target.order };
-        return c;
-      });
-      setCategories(nextCategories);
-      await syncToServer({ categories: nextCategories });
+      const tempOrder = sorted[idx].order;
+      sorted[idx] = { ...sorted[idx], order: sorted[swapIdx].order };
+      sorted[swapIdx] = { ...sorted[swapIdx], order: tempOrder };
+
+      const nextCats = sorted.sort((a, b) => a.order - b.order);
+      setCategories(nextCats);
+      persistCache({ categories: nextCats });
+      await syncToServer({ categories: nextCats });
     },
-    [categories, syncToServer]
+    [persistCache, setCategories, syncToServer]
   );
 
   const deleteCategory = useCallback(
@@ -898,62 +1042,54 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       categoryId: string,
       reassignToSlug?: string
     ): Promise<{ ok: boolean; error?: string }> => {
-      const target = categories.find((c) => c.id === categoryId);
+      const currentCategories = categoriesRef.current;
+      const currentPosts = postsRef.current;
+      const target = currentCategories.find((c) => c.id === categoryId);
       if (!target) return { ok: false, error: 'Category not found.' };
 
-      const dependentPosts = posts.filter(
-        (p) =>
-          p.category === target.slug ||
-          p.organization.toLowerCase() === target.name.toLowerCase()
+      const dependentPosts = currentPosts.filter(
+        (p) => p.category === target.slug || p.subcategory === target.slug
       );
 
       if (dependentPosts.length > 0 && !reassignToSlug) {
         return {
           ok: false,
-          error: `${dependentPosts.length} post(s) currently depend on "${target.name}". Please select a reassignment category first.`,
+          error: `Cannot delete "${target.name}" because ${dependentPosts.length} posts use it. Please select a reassignment category first.`,
         };
       }
 
-      let nextPosts = posts;
+      let nextPosts = currentPosts;
       if (dependentPosts.length > 0 && reassignToSlug) {
-        const replacement = categories.find((c) => c.slug === reassignToSlug);
-        nextPosts = posts.map((p) => {
+        nextPosts = currentPosts.map((p) => {
           if (target.type === 'section' && p.category === target.slug) {
             return { ...p, category: reassignToSlug as Post['category'] };
           }
-          if (
-            target.type === 'domain' &&
-            p.organization.toLowerCase() === target.name.toLowerCase()
-          ) {
-            return { ...p, organization: replacement?.name || 'Other' };
+          if (target.type === 'domain' && p.subcategory === target.slug) {
+            return { ...p, subcategory: reassignToSlug };
           }
           return p;
         });
         setPosts(nextPosts);
+        persistCache({ posts: nextPosts });
       }
 
-      const nextCategories = categories.filter((c) => c.id !== categoryId);
-      setCategories(nextCategories);
-      const log = await recordAudit('Deleted Category', target.name);
-      await syncToServer({
-        posts: nextPosts,
-        categories: nextCategories,
-        auditLogs: [log, ...auditLogs],
-      });
+      const nextCats = currentCategories.filter((c) => c.id !== categoryId);
+      setCategories(nextCats);
+      persistCache({ categories: nextCats });
+      await syncToServer({ categories: nextCats, posts: nextPosts });
 
       if (auth.currentUser) {
-        try {
-          await deleteDoc(doc(db, 'categories', categoryId));
-        } catch (e) {
-          handleFirestoreError(e, OperationType.DELETE, `categories/${categoryId}`);
-        }
+        await deleteDoc(doc(db, 'categories', categoryId)).catch(() => {});
       }
-      showToast(`Category "${target.name}" removed.`, 'info');
+
+      await appendAuditLog('delete', 'category', categoryId, target.name, 'Deleted category');
+      showToast(`Deleted category "${target.name}"`, 'info');
       return { ok: true };
     },
-    [categories, posts, auditLogs, recordAudit, syncToServer, showToast]
+    [appendAuditLog, persistCache, setCategories, setPosts, showToast, syncToServer]
   );
 
+  // Media Library Validation, Upload & In-Use Protection
   const uploadMediaItem = useCallback(
     async (item: {
       name: string;
@@ -962,116 +1098,120 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       sizeBytes: number;
       altText: string;
     }): Promise<{ ok: boolean; error?: string }> => {
-      const allowedMimes = [
+      const allowedTypes = [
         'image/jpeg',
         'image/png',
         'image/webp',
         'image/svg+xml',
         'application/pdf',
       ];
-      if (!allowedMimes.includes(item.mimeType)) {
+      if (!allowedTypes.includes(item.mimeType)) {
         return {
           ok: false,
-          error: 'Invalid file type. Only JPG, PNG, WebP, SVG, and PDF files are permitted.',
+          error: 'Invalid file type. Allowed: JPG, PNG, WebP, SVG, and PDF.',
         };
       }
-      if (item.sizeBytes > 5 * 1024 * 1024) {
+      const maxBytes = item.mimeType === 'application/pdf' ? 10 * 1024 * 1024 : 5 * 1024 * 1024;
+      if (item.sizeBytes > maxBytes) {
         return {
           ok: false,
-          error: 'File size exceeds the 5 MB security limit.',
+          error: `File size exceeds maximum limit (${
+            item.mimeType === 'application/pdf' ? '10MB' : '5MB'
+          }).`,
         };
       }
 
-      const record: MediaLibraryItem = {
-        id: `med-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-        name: item.name.trim().slice(0, 150),
+      const newMedia: MediaLibraryItem = {
+        id: `media-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
+        name: item.name.trim(),
         url: item.url,
         mimeType: item.mimeType,
         sizeBytes: item.sizeBytes,
-        altText: item.altText.trim().slice(0, 250) || item.name,
-        uploadedBy: adminUser?.email || 'admin@careeralertindia.in',
+        altText: item.altText.trim() || item.name.trim(),
         createdAt: new Date().toISOString(),
+        uploadedBy: adminUser?.email || 'arjunjareda2007@gmail.com',
       };
 
-      const nextMedia = [record, ...media];
+      const nextMedia = [newMedia, ...mediaRef.current];
       setMedia(nextMedia);
-      const log = await recordAudit('Uploaded Media', record.name);
-      await syncToServer({ media: nextMedia, auditLogs: [log, ...auditLogs] });
+      await syncToServer({ media: nextMedia });
 
-      if (auth.currentUser && record.url.length <= 190000) {
-        try {
-          await setDoc(doc(db, 'media', record.id), record);
-        } catch (e) {
-          handleFirestoreError(e, OperationType.WRITE, `media/${record.id}`);
-        }
+      if (auth.currentUser) {
+        await setDoc(doc(db, 'media', newMedia.id), newMedia).catch(() => {});
       }
-      showToast('Media asset added to library.', 'success');
+
+      await appendAuditLog('create', 'media', newMedia.id, newMedia.name, 'Uploaded media asset');
+      showToast(`Uploaded "${newMedia.name}" to Media Library`, 'success');
       return { ok: true };
     },
-    [media, auditLogs, adminUser, recordAudit, syncToServer, showToast]
+    [adminUser, appendAuditLog, setMedia, showToast, syncToServer]
   );
 
   const deleteMediaItem = useCallback(
     async (mediaId: string): Promise<{ ok: boolean; error?: string }> => {
-      const target = media.find((m) => m.id === mediaId);
-      if (!target) return { ok: false, error: 'Media item not found.' };
+      const currentMedia = mediaRef.current;
+      const currentPosts = postsRef.current;
+      const target = currentMedia.find((m) => m.id === mediaId);
+      if (!target) return { ok: false, error: 'Media asset not found.' };
 
-      const inUse = posts.some(
-        (p) => p.featuredImage === target.url || p.ogImage === target.url
+      const usedByPost = currentPosts.find(
+        (p) =>
+          p.featuredImage === target.url ||
+          p.ogImage === target.url ||
+          (p.importantLinks || []).some((l) => l.url === target.url)
       );
-      if (inUse) {
+
+      if (usedByPost) {
         return {
           ok: false,
-          error: 'This media asset is currently used as a featured/OG image in an existing post.',
+          error: `Cannot delete "${target.name}" because it is currently used in "${usedByPost.title}".`,
         };
       }
 
-      const nextMedia = media.filter((m) => m.id !== mediaId);
+      const nextMedia = currentMedia.filter((m) => m.id !== mediaId);
       setMedia(nextMedia);
-      const log = await recordAudit('Deleted Media Asset', target.name);
-      await syncToServer({ media: nextMedia, auditLogs: [log, ...auditLogs] });
+      await syncToServer({ media: nextMedia });
 
       if (auth.currentUser) {
-        try {
-          await deleteDoc(doc(db, 'media', mediaId));
-        } catch (e) {
-          handleFirestoreError(e, OperationType.DELETE, `media/${mediaId}`);
-        }
+        await deleteDoc(doc(db, 'media', mediaId)).catch(() => {});
       }
-      showToast('Media asset deleted.', 'info');
+
+      await appendAuditLog('delete', 'media', mediaId, target.name, 'Deleted media asset');
+      showToast(`Deleted "${target.name}"`, 'info');
       return { ok: true };
     },
-    [media, posts, auditLogs, recordAudit, syncToServer, showToast]
+    [appendAuditLog, setMedia, showToast, syncToServer]
   );
 
+  // Site Settings
   const updateSiteSettings = useCallback(
     async (newSettings: Partial<SiteSettings>) => {
       const updated: SiteSettings = {
-        ...settings,
+        ...settingsRef.current,
         ...newSettings,
-        whatsappChannelUrl:
-          sanitizeUrl(newSettings.whatsappChannelUrl ?? settings.whatsappChannelUrl) ||
-          settings.whatsappChannelUrl,
-        isPublic: true,
         updatedAt: new Date().toISOString(),
       };
       setSettings(updated);
       persistCache({ settings: updated });
-      const log = await recordAudit('Updated Site Settings', 'Global Configuration');
-      await syncToServer({ settings: updated, auditLogs: [log, ...auditLogs] });
+      await syncToServer({ settings: updated });
 
       if (auth.currentUser) {
-        try {
-          await setDoc(doc(db, 'settings', 'global'), updated);
-        } catch (e) {
-          handleFirestoreError(e, OperationType.WRITE, 'settings/global');
-        }
+        await setDoc(doc(db, 'settings', 'global'), updated).catch(() => {});
       }
-      showToast('Site settings saved and published.', 'success');
+
+      await appendAuditLog(
+        'settings_update',
+        'settings',
+        'global',
+        updated.siteName,
+        'Updated global site & brand settings'
+      );
+      showToast('Site & Brand Settings updated', 'success');
     },
-    [settings, auditLogs, persistCache, recordAudit, syncToServer, showToast]
+    [appendAuditLog, persistCache, setSettings, showToast, syncToServer]
   );
 
+  // Contact Form Submission
   const submitContactMessage = useCallback(
     async (payload: {
       name: string;
@@ -1088,77 +1228,140 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         });
         const data = await res.json();
         if (!res.ok) {
-          return { ok: false, error: data.error || 'Could not submit inquiry.' };
+          return { ok: false, error: data.error || 'Failed to submit message.' };
         }
-        if (data.record) {
-          setContactMessages((prev) => [data.record, ...prev]);
-          try {
-            await setDoc(doc(db, 'contactMessages', data.record.id), {
-              name: data.record.name,
-              email: data.record.email,
-              subject: data.record.subject,
-              message: data.record.message,
-              status: 'unread',
-              createdAt: data.record.createdAt,
-            });
-          } catch {
-            // ignore offline firestore error on public contact
-          }
+
+        const msg: ContactSubmission = {
+          id: `msg-${Date.now()}`,
+          name: payload.name.trim(),
+          email: payload.email.trim(),
+          subject: payload.subject.trim(),
+          message: payload.message.trim(),
+          status: 'unread',
+          createdAt: new Date().toISOString(),
+        };
+        const nextMessages = [msg, ...contactMessagesRef.current];
+        setContactMessages(nextMessages);
+
+        try {
+          await setDoc(doc(db, 'contact_messages', msg.id), msg);
+        } catch {
+          // ignore if offline
         }
+
         return { ok: true };
-      } catch (e: any) {
-        return { ok: false, error: e.message || 'Failed to submit contact form.' };
+      } catch {
+        return { ok: false, error: 'Unable to send message right now. Please try again.' };
       }
     },
-    []
+    [setContactMessages]
   );
 
   const updateContactMessageStatus = useCallback(
     async (msgId: string, status: ContactSubmission['status']) => {
-      const next = contactMessages.map((m) => (m.id === msgId ? { ...m, status } : m));
+      const next = contactMessagesRef.current.map((m) =>
+        m.id === msgId ? { ...m, status } : m
+      );
       setContactMessages(next);
       await syncToServer({ contactMessages: next });
-      showToast(`Inquiry marked as ${status}.`, 'info');
+      if (auth.currentUser) {
+        const target = next.find((m) => m.id === msgId);
+        if (target) {
+          await setDoc(doc(db, 'contact_messages', msgId), target).catch(() => {});
+        }
+      }
+      showToast(`Marked message as ${status}`, 'info');
     },
-    [contactMessages, syncToServer, showToast]
+    [setContactMessages, showToast, syncToServer]
   );
 
+  const deleteContactMessage = useCallback(
+    async (msgId: string) => {
+      const target = contactMessagesRef.current.find((m) => m.id === msgId);
+      const next = contactMessagesRef.current.filter((m) => m.id !== msgId);
+      setContactMessages(next);
+      await syncToServer({ contactMessages: next });
+      if (auth.currentUser) {
+        await deleteDoc(doc(db, 'contact_messages', msgId)).catch(() => {});
+      }
+      if (target) {
+        await appendAuditLog(
+          'delete',
+          'contact',
+          msgId,
+          target.subject || target.name,
+          `Deleted inquiry from ${target.email}`
+        );
+      }
+      showToast('Deleted contact message', 'info');
+    },
+    [appendAuditLog, setContactMessages, showToast, syncToServer]
+  );
+
+  // Content Management Utilities
   const purgeDemoContent = useCallback(async (): Promise<number> => {
-    const demoCount = posts.filter((p) => p.isDemo).length;
-    const nextPosts = posts.filter((p) => !p.isDemo);
+    const currentPosts = postsRef.current;
+    const demoPosts = currentPosts.filter((p) => p.isDemo);
+    const nextPosts = currentPosts.filter((p) => !p.isDemo);
     setPosts(nextPosts);
     persistCache({ posts: nextPosts });
-    const log = await recordAudit(
-      'Purged Demo Content',
-      `Removed ${demoCount} sample verification posts`
+    await syncToServer({ posts: nextPosts });
+
+    if (auth.currentUser) {
+      for (const dp of demoPosts) {
+        await deleteDoc(doc(db, 'posts', dp.id)).catch(() => {});
+      }
+    }
+
+    await appendAuditLog(
+      'delete',
+      'post',
+      'batch-purge',
+      'Batch Purge',
+      `Purged ${demoPosts.length} tagged posts`
     );
-    await syncToServer({ posts: nextPosts, auditLogs: [log, ...auditLogs] });
-    showToast(`Removed ${demoCount} demo sample posts.`, 'success');
-    return demoCount;
-  }, [posts, auditLogs, persistCache, recordAudit, syncToServer, showToast]);
+    showToast(`Removed ${demoPosts.length} tagged posts`, 'success');
+    return demoPosts.length;
+  }, [appendAuditLog, persistCache, setPosts, showToast, syncToServer]);
 
   const restoreDemoContent = useCallback(async () => {
-    const existingIds = new Set(posts.map((p) => p.id));
-    const missingDemos = INITIAL_POSTS.filter((p) => !existingIds.has(p.id));
-    const nextPosts = [...posts, ...missingDemos];
+    const currentPosts = postsRef.current;
+    const existingIds = new Set(currentPosts.map((p) => p.id));
+    const missing = INITIAL_POSTS.filter((p) => !existingIds.has(p.id));
+    const nextPosts = [...missing, ...currentPosts];
     setPosts(nextPosts);
     persistCache({ posts: nextPosts });
-    const log = await recordAudit('Restored Demo Content', 'Sample Verification Posts');
-    await syncToServer({ posts: nextPosts, auditLogs: [log, ...auditLogs] });
-    showToast('Sample demo posts restored.', 'success');
-  }, [posts, auditLogs, persistCache, recordAudit, syncToServer, showToast]);
+    await syncToServer({ posts: nextPosts });
 
-  const publishedPosts = React.useMemo(
-    () =>
-      posts
-        .filter((p) => p.status === 'published')
-        .sort(
-          (a, b) =>
-            new Date(b.publishedAt || b.updatedAt || b.createdAt).getTime() -
-            new Date(a.publishedAt || a.updatedAt || a.createdAt).getTime()
-        ),
-    [posts]
-  );
+    if (auth.currentUser) {
+      for (const mp of missing) {
+        await setDoc(doc(db, 'posts', mp.id), mp).catch(() => {});
+      }
+    }
+
+    await appendAuditLog(
+      'create',
+      'post',
+      'restore-defaults',
+      'Restore Default Posts',
+      `Restored ${missing.length} default posts`
+    );
+    showToast(`Restored ${missing.length} default posts`, 'success');
+  }, [appendAuditLog, persistCache, setPosts, showToast, syncToServer]);
+
+  // Published posts computed list (auto-publishes scheduled posts whose time has arrived)
+  const publishedPosts = React.useMemo(() => {
+    const now = new Date().toISOString();
+    return posts
+      .filter(
+        (p) =>
+          p.status === 'published' ||
+          (p.status === 'scheduled' && p.scheduledFor && p.scheduledFor <= now)
+      )
+      .sort((a, b) =>
+        (b.publishedAt || b.updatedAt || '').localeCompare(a.publishedAt || a.updatedAt || '')
+      );
+  }, [posts]);
 
   return (
     <CMSContext.Provider
@@ -1199,6 +1402,7 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateSiteSettings,
         submitContactMessage,
         updateContactMessageStatus,
+        deleteContactMessage,
         purgeDemoContent,
         restoreDemoContent,
         refreshData,
@@ -1215,57 +1419,4 @@ export function useCMS(): CMSContextValue {
     throw new Error('useCMS must be used within a CMSProvider');
   }
   return ctx;
-}
-
-function sanitizeFirestorePostPayload(post: Post): Record<string, unknown> {
-  const payload: Record<string, unknown> = {
-    title: post.title,
-    slug: post.slug,
-    category: post.category,
-    organization: post.organization,
-    state: post.state,
-    summary: post.summary,
-    status: post.status,
-    authorUid: post.authorUid,
-    createdAt: post.createdAt,
-    updatedAt: post.updatedAt,
-  };
-  if (post.subcategory) payload.subcategory = post.subcategory;
-  if (post.content) payload.content = post.content;
-  if (post.badge) payload.badge = post.badge;
-  if (typeof post.featured === 'boolean') payload.featured = post.featured;
-  if (typeof post.isDemo === 'boolean') payload.isDemo = post.isDemo;
-  if (post.featuredImage) payload.featuredImage = post.featuredImage;
-  if (post.qualification) payload.qualification = post.qualification;
-  if (post.jobType) payload.jobType = post.jobType;
-  if (typeof post.totalVacancies === 'number') payload.totalVacancies = post.totalVacancies;
-  if (post.location) payload.location = post.location;
-  if (post.salary) payload.salary = post.salary;
-  if (post.applicationStart) payload.applicationStart = post.applicationStart;
-  if (post.applicationEnd) payload.applicationEnd = post.applicationEnd;
-  if (post.examDate) payload.examDate = post.examDate;
-  if (post.admitCardDate) payload.admitCardDate = post.admitCardDate;
-  if (post.resultDate) payload.resultDate = post.resultDate;
-  if (post.resultStatus) payload.resultStatus = post.resultStatus;
-  if (post.answerKeyType) payload.answerKeyType = post.answerKeyType;
-  if (post.objectionDeadline) payload.objectionDeadline = post.objectionDeadline;
-  if (post.officialSourceUrl) payload.officialSourceUrl = post.officialSourceUrl;
-  if (post.statusOverride) payload.statusOverride = post.statusOverride;
-  if (post.importantDates) payload.importantDates = post.importantDates.slice(0, 20);
-  if (post.vacancies) payload.vacancies = post.vacancies.slice(0, 30);
-  if (post.eligibility) payload.eligibility = post.eligibility;
-  if (post.fees) payload.fees = post.fees.slice(0, 15);
-  if (post.selectionProcess) payload.selectionProcess = post.selectionProcess.slice(0, 15);
-  if (post.howToApply) payload.howToApply = post.howToApply.slice(0, 15);
-  if (post.importantLinks) payload.importantLinks = post.importantLinks.slice(0, 15);
-  if (post.faqs) payload.faqs = post.faqs.slice(0, 15);
-  if (post.syllabusSections) payload.syllabusSections = post.syllabusSections.slice(0, 20);
-  if (post.seoTitle) payload.seoTitle = post.seoTitle;
-  if (post.seoDescription) payload.seoDescription = post.seoDescription;
-  if (post.canonicalUrl) payload.canonicalUrl = post.canonicalUrl;
-  if (post.ogImage) payload.ogImage = post.ogImage;
-  if (post.tags) payload.tags = post.tags.slice(0, 15);
-  if (post.scheduledFor) payload.scheduledFor = post.scheduledFor;
-  if (post.publishedAt) payload.publishedAt = post.publishedAt;
-  return payload;
 }

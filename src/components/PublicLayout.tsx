@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { useCMS } from '../context/CMSContext';
 import { computePostStatus } from '../utils/statusAndSanitize';
-import { BrandLogo, CircularEmblemSVG } from './BrandLogo';
+import { BrandLogo } from './BrandLogo';
 
 export const PublicLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const {
@@ -40,6 +40,8 @@ export const PublicLayout: React.FC<{ children: React.ReactNode }> = ({ children
   const [searchCategory, setSearchCategory] = useState<string>('all');
   const [tickerPaused, setTickerPaused] = useState(false);
 
+  const moreDropdownRef = useRef<HTMLDivElement>(null);
+
   // Secret owner 5-tap counter on copyright text for mobile owner access
   const secretTapCountRef = useRef<number>(0);
   const secretTapTimerRef = useRef<number | null>(null);
@@ -53,6 +55,18 @@ export const PublicLayout: React.FC<{ children: React.ReactNode }> = ({ children
     setSearchModalOpen(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [location.pathname]);
+
+  // Close "More" dropdown when clicking outside
+  useEffect(() => {
+    if (!moreDropdownOpen) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      if (moreDropdownRef.current && !moreDropdownRef.current.contains(event.target as Node)) {
+        setMoreDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [moreDropdownOpen]);
 
   // Keyboard shortcuts:
   // - Ctrl+K / Cmd+K -> Open global search
@@ -139,6 +153,20 @@ export const PublicLayout: React.FC<{ children: React.ReactNode }> = ({ children
     );
   };
 
+  const navLinkClass = ({ isActive }: { isActive: boolean }) =>
+    `inline-flex items-center h-9 px-0.5 leading-none transition-colors whitespace-nowrap border-b-2 ${
+      isActive
+        ? 'text-white border-[#FF7A00] font-semibold'
+        : 'border-transparent hover:text-white hover:border-white/40'
+    }`;
+
+  const xlNavLinkClass = ({ isActive }: { isActive: boolean }) =>
+    `hidden xl:inline-flex items-center h-9 px-0.5 leading-none transition-colors whitespace-nowrap border-b-2 ${
+      isActive
+        ? 'text-white border-[#FF7A00] font-semibold'
+        : 'border-transparent hover:text-white hover:border-white/40'
+    }`;
+
   return (
     <div className="min-h-screen w-full max-w-full overflow-x-hidden flex flex-col bg-[#F6F8FB] text-[#071A3D]">
       {/* Subtle 3px Indian Tricolour Accent Strip at very top */}
@@ -157,15 +185,15 @@ export const PublicLayout: React.FC<{ children: React.ReactNode }> = ({ children
               type="button"
               onClick={() => setMobileMenuOpen(true)}
               aria-label="Open navigation menu"
-              className="lg:hidden p-2 -ml-1 rounded-md text-white/90 hover:text-white hover:bg-white/10 transition-colors shrink-0 cursor-pointer"
+              className="lg:hidden inline-flex items-center justify-center w-9 h-9 -ml-1 rounded-md text-white/90 hover:text-white hover:bg-white/10 transition-colors shrink-0 cursor-pointer"
             >
-              <Menu className="w-5 h-5" />
+              <Menu className="w-5 h-5 shrink-0" />
             </button>
 
             <Link
               to="/"
               aria-label="Career Alert India Home"
-              className="focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF7A00] rounded-md py-1 min-w-0"
+              className="inline-flex items-center focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF7A00] rounded-md py-1 min-w-0"
             >
               <BrandLogo variant="header" theme="dark" />
             </Link>
@@ -176,146 +204,87 @@ export const PublicLayout: React.FC<{ children: React.ReactNode }> = ({ children
             aria-label="Main Navigation"
             className="hidden lg:flex items-center gap-5 text-sm font-medium text-white/85 shrink-0"
           >
-            <NavLink
-              to="/"
-              end
-              className={({ isActive }) =>
-                `py-1 transition-colors whitespace-nowrap border-b-2 ${
-                  isActive
-                    ? 'text-white border-[#FF7A00] font-semibold'
-                    : 'border-transparent hover:text-white hover:border-white/40'
-                }`
-              }
-            >
+            <NavLink to="/" end className={navLinkClass}>
               Home
             </NavLink>
-            <NavLink
-              to="/latest"
-              className={({ isActive }) =>
-                `py-1 transition-colors whitespace-nowrap border-b-2 ${
-                  isActive
-                    ? 'text-white border-[#FF7A00] font-semibold'
-                    : 'border-transparent hover:text-white hover:border-white/40'
-                }`
-              }
-            >
+            <NavLink to="/latest" className={navLinkClass}>
               Latest
             </NavLink>
-            <NavLink
-              to="/jobs"
-              className={({ isActive }) =>
-                `py-1 transition-colors whitespace-nowrap border-b-2 ${
-                  isActive
-                    ? 'text-white border-[#FF7A00] font-semibold'
-                    : 'border-transparent hover:text-white hover:border-white/40'
-                }`
-              }
-            >
+            <NavLink to="/jobs" className={navLinkClass}>
               Jobs
             </NavLink>
-            <NavLink
-              to="/exams"
-              className={({ isActive }) =>
-                `py-1 transition-colors whitespace-nowrap border-b-2 ${
-                  isActive
-                    ? 'text-white border-[#FF7A00] font-semibold'
-                    : 'border-transparent hover:text-white hover:border-white/40'
-                }`
-              }
-            >
+            <NavLink to="/exams" className={navLinkClass}>
               Exams
             </NavLink>
-            <NavLink
-              to="/results"
-              className={({ isActive }) =>
-                `py-1 transition-colors whitespace-nowrap border-b-2 ${
-                  isActive
-                    ? 'text-white border-[#FF7A00] font-semibold'
-                    : 'border-transparent hover:text-white hover:border-white/40'
-                }`
-              }
-            >
+            <NavLink to="/results" className={navLinkClass}>
               Results
             </NavLink>
-            <NavLink
-              to="/admit-card"
-              className={({ isActive }) =>
-                `py-1 transition-colors whitespace-nowrap border-b-2 ${
-                  isActive
-                    ? 'text-white border-[#FF7A00] font-semibold'
-                    : 'border-transparent hover:text-white hover:border-white/40'
-                }`
-              }
-            >
+            <NavLink to="/admit-card" className={navLinkClass}>
               Admit Card
             </NavLink>
-            <NavLink
-              to="/answer-key"
-              className={({ isActive }) =>
-                `hidden xl:inline-block py-1 transition-colors whitespace-nowrap border-b-2 ${
-                  isActive
-                    ? 'text-white border-[#FF7A00] font-semibold'
-                    : 'border-transparent hover:text-white hover:border-white/40'
-                }`
-              }
-            >
+            <NavLink to="/answer-key" className={xlNavLinkClass}>
               Answer Key
             </NavLink>
-            <NavLink
-              to="/syllabus"
-              className={({ isActive }) =>
-                `hidden xl:inline-block py-1 transition-colors whitespace-nowrap border-b-2 ${
-                  isActive
-                    ? 'text-white border-[#FF7A00] font-semibold'
-                    : 'border-transparent hover:text-white hover:border-white/40'
-                }`
-              }
-            >
+            <NavLink to="/syllabus" className={xlNavLinkClass}>
               Syllabus
             </NavLink>
 
             {/* More Dropdown */}
-            <div className="relative">
+            <div ref={moreDropdownRef} className="relative flex items-center">
               <button
                 type="button"
                 onClick={() => setMoreDropdownOpen((prev) => !prev)}
                 aria-expanded={moreDropdownOpen}
-                className="inline-flex items-center gap-1 py-1 text-white/85 hover:text-white transition-colors whitespace-nowrap cursor-pointer"
+                aria-haspopup="menu"
+                className={`inline-flex items-center gap-1 h-9 px-0.5 leading-none border-b-2 transition-colors whitespace-nowrap cursor-pointer ${
+                  moreDropdownOpen
+                    ? 'text-white border-[#FF7A00] font-semibold'
+                    : 'border-transparent text-white/85 hover:text-white hover:border-white/40'
+                }`}
               >
                 <span>More</span>
                 <ChevronDown
-                  className={`w-4 h-4 transition-transform duration-200 ${
-                    moreDropdownOpen ? 'rotate-180' : ''
+                  className={`w-4 h-4 shrink-0 transition-transform duration-200 ${
+                    moreDropdownOpen ? 'rotate-180 text-[#FF7A00]' : ''
                   }`}
                 />
               </button>
 
               {moreDropdownOpen && (
-                <div className="absolute right-0 mt-2 w-56 bg-white text-[#071A3D] rounded-lg shadow-xl border border-[#E2E8F0] py-1.5 z-50 animate-modal-pop">
+                <div
+                  role="menu"
+                  className="absolute right-0 top-full mt-2 w-56 bg-white text-[#071A3D] rounded-lg shadow-xl border border-[#E2E8F0] py-1.5 z-50 animate-modal-pop"
+                >
                   <Link
                     to="/answer-key"
+                    onClick={() => setMoreDropdownOpen(false)}
                     className="xl:hidden block px-4 py-2 text-sm hover:bg-[#F6F8FB] transition-colors"
                   >
                     Answer Key
                   </Link>
                   <Link
                     to="/syllabus"
+                    onClick={() => setMoreDropdownOpen(false)}
                     className="xl:hidden block px-4 py-2 text-sm hover:bg-[#F6F8FB] transition-colors"
                   >
                     Syllabus
                   </Link>
                   <Link
                     to="/calendar"
+                    onClick={() => setMoreDropdownOpen(false)}
                     className="flex items-center justify-between px-4 py-2 text-sm hover:bg-[#F6F8FB] transition-colors"
                   >
                     <span>Exam Calendar</span>
-                    <Calendar className="w-4 h-4 text-[#64748B]" />
+                    <Calendar className="w-4 h-4 text-[#64748B] shrink-0" />
                   </Link>
                   <Link
                     to="/saved"
+                    onClick={() => setMoreDropdownOpen(false)}
                     className="flex items-center justify-between px-4 py-2 text-sm hover:bg-[#F6F8FB] transition-colors"
                   >
-                    <span>Saved Updates</span>
+                    <span className="inline-flex items-center gap-1.5">
+                      <span>Saved Updates</span>
+                    </span>
                     <span className="font-mono-tabular text-xs font-semibold text-[#FF7A00]">
                       {bookmarks.length}
                     </span>
@@ -323,30 +292,35 @@ export const PublicLayout: React.FC<{ children: React.ReactNode }> = ({ children
                   <div className="my-1 border-t border-[#E2E8F0]" />
                   <Link
                     to="/about"
+                    onClick={() => setMoreDropdownOpen(false)}
                     className="block px-4 py-1.5 text-xs text-[#64748B] hover:text-[#071A3D] hover:bg-[#F6F8FB] transition-colors"
                   >
                     About Career Alert India
                   </Link>
                   <Link
                     to="/contact"
+                    onClick={() => setMoreDropdownOpen(false)}
                     className="block px-4 py-1.5 text-xs text-[#64748B] hover:text-[#071A3D] hover:bg-[#F6F8FB] transition-colors"
                   >
                     Contact Editorial Desk
                   </Link>
                   <Link
                     to="/privacy-policy"
+                    onClick={() => setMoreDropdownOpen(false)}
                     className="block px-4 py-1.5 text-xs text-[#64748B] hover:text-[#071A3D] hover:bg-[#F6F8FB] transition-colors"
                   >
                     Privacy Policy
                   </Link>
                   <Link
                     to="/terms"
+                    onClick={() => setMoreDropdownOpen(false)}
                     className="block px-4 py-1.5 text-xs text-[#64748B] hover:text-[#071A3D] hover:bg-[#F6F8FB] transition-colors"
                   >
                     Terms of Use
                   </Link>
                   <Link
                     to="/disclaimer"
+                    onClick={() => setMoreDropdownOpen(false)}
                     className="block px-4 py-1.5 text-xs text-[#64748B] hover:text-[#071A3D] hover:bg-[#F6F8FB] transition-colors"
                   >
                     Official Source Disclaimer
@@ -356,17 +330,17 @@ export const PublicLayout: React.FC<{ children: React.ReactNode }> = ({ children
             </div>
           </nav>
 
-          {/* Zone 3: 1–2 Primary Actions (Search + WhatsApp CTA) */}
+          {/* Zone 3: Primary Actions (Search + WhatsApp CTA) */}
           <div className="flex items-center gap-2 shrink-0">
             <button
               type="button"
               onClick={() => setSearchModalOpen(true)}
               aria-label="Search exams, jobs, results, and notifications"
-              className="btn-press inline-flex items-center gap-2 px-2.5 sm:px-3 py-1.5 rounded-md bg-white/10 hover:bg-white/15 text-xs font-medium text-white whitespace-nowrap cursor-pointer"
+              className="btn-press inline-flex items-center justify-center gap-2 h-9 px-2.5 sm:px-3 rounded-md bg-white/10 hover:bg-white/15 border border-white/10 text-xs font-medium text-white leading-none whitespace-nowrap cursor-pointer"
             >
               <Search className="w-4 h-4 text-[#FF7A00] shrink-0" />
-              <span className="hidden sm:inline">Search Updates...</span>
-              <kbd className="hidden md:inline-block text-[10px] font-mono-tabular px-1.5 py-0.5 bg-white/10 rounded">
+              <span className="hidden sm:inline leading-none">Search Updates...</span>
+              <kbd className="hidden md:inline-flex items-center justify-center text-[10px] font-mono-tabular px-1.5 h-5 bg-white/10 rounded leading-none">
                 ⌘K
               </kbd>
             </button>
@@ -376,9 +350,9 @@ export const PublicLayout: React.FC<{ children: React.ReactNode }> = ({ children
               target="_blank"
               rel="noopener noreferrer"
               onClick={() => trackEvent('whatsapp_click', 'Header WhatsApp CTA')}
-              className="btn-press hidden sm:inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-md bg-[#138A36] hover:bg-[#10752D] text-xs font-semibold text-white whitespace-nowrap"
+              className="btn-press hidden sm:inline-flex items-center justify-center gap-1.5 h-9 px-3.5 rounded-md bg-[#138A36] hover:bg-[#10752D] text-xs font-semibold text-white leading-none whitespace-nowrap"
             >
-              <span>WhatsApp Channel</span>
+              <span className="leading-none">WhatsApp Channel</span>
               <ExternalLink className="w-3.5 h-3.5 shrink-0" />
             </a>
           </div>
@@ -389,8 +363,8 @@ export const PublicLayout: React.FC<{ children: React.ReactNode }> = ({ children
       {settings.tickerEnabled && tickerItems.length > 0 && (
         <div className="bg-white border-b border-[#E2E8F0] text-xs">
           <div className="max-w-[1280px] mx-auto px-3 sm:px-6 h-9 flex items-center gap-2.5 sm:gap-3 overflow-hidden">
-            <span className="inline-flex items-center gap-1.5 font-semibold text-[#071A3D] shrink-0 pr-2.5 border-r border-[#E2E8F0]">
-              <span className="w-2 h-2 rounded-full bg-[#DC2626] animate-pulse" />
+            <span className="inline-flex items-center gap-1.5 font-semibold text-[#071A3D] shrink-0 pr-2.5 border-r border-[#E2E8F0] leading-none">
+              <span className="w-2 h-2 rounded-full bg-[#DC2626] animate-pulse shrink-0" />
               <span className="text-[11px] sm:text-xs tracking-wide">LATEST UPDATE</span>
             </span>
 
@@ -413,7 +387,7 @@ export const PublicLayout: React.FC<{ children: React.ReactNode }> = ({ children
               type="button"
               onClick={() => setTickerPaused((p) => !p)}
               aria-label={tickerPaused ? 'Resume update ticker' : 'Pause update ticker'}
-              className="p-1 text-[#64748B] hover:text-[#071A3D] shrink-0 rounded cursor-pointer"
+              className="inline-flex items-center justify-center w-6 h-6 text-[#64748B] hover:text-[#071A3D] shrink-0 rounded cursor-pointer"
               title={tickerPaused ? 'Resume Ticker' : 'Pause Ticker'}
             >
               {tickerPaused ? <Play className="w-3.5 h-3.5" /> : <Pause className="w-3.5 h-3.5" />}
@@ -436,7 +410,7 @@ export const PublicLayout: React.FC<{ children: React.ReactNode }> = ({ children
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 pb-10 border-b border-white/10">
             {/* Column 1: Brand Identity Lockup */}
             <div className="space-y-3">
-              <Link to="/" className="inline-block focus:outline-none">
+              <Link to="/" className="inline-flex items-center focus:outline-none">
                 <BrandLogo variant="header" theme="dark" />
               </Link>
               <p className="text-xs text-white/75 leading-relaxed pt-1">
@@ -612,8 +586,10 @@ export const PublicLayout: React.FC<{ children: React.ReactNode }> = ({ children
           to="/"
           end
           className={({ isActive }) =>
-            `flex flex-col items-center justify-center h-full transition-colors ${
-              isActive ? 'text-[#071A3D] font-semibold border-t-2 border-[#FF7A00]' : ''
+            `flex flex-col items-center justify-center h-full border-t-2 transition-colors ${
+              isActive
+                ? 'text-[#071A3D] font-semibold border-[#FF7A00]'
+                : 'border-transparent hover:text-[#071A3D]'
             }`
           }
         >
@@ -622,8 +598,10 @@ export const PublicLayout: React.FC<{ children: React.ReactNode }> = ({ children
         <NavLink
           to="/latest"
           className={({ isActive }) =>
-            `flex flex-col items-center justify-center h-full transition-colors ${
-              isActive ? 'text-[#071A3D] font-semibold border-t-2 border-[#FF7A00]' : ''
+            `flex flex-col items-center justify-center h-full border-t-2 transition-colors ${
+              isActive
+                ? 'text-[#071A3D] font-semibold border-[#FF7A00]'
+                : 'border-transparent hover:text-[#071A3D]'
             }`
           }
         >
@@ -632,8 +610,10 @@ export const PublicLayout: React.FC<{ children: React.ReactNode }> = ({ children
         <NavLink
           to="/jobs"
           className={({ isActive }) =>
-            `flex flex-col items-center justify-center h-full transition-colors ${
-              isActive ? 'text-[#071A3D] font-semibold border-t-2 border-[#FF7A00]' : ''
+            `flex flex-col items-center justify-center h-full border-t-2 transition-colors ${
+              isActive
+                ? 'text-[#071A3D] font-semibold border-[#FF7A00]'
+                : 'border-transparent hover:text-[#071A3D]'
             }`
           }
         >
@@ -642,8 +622,10 @@ export const PublicLayout: React.FC<{ children: React.ReactNode }> = ({ children
         <NavLink
           to="/results"
           className={({ isActive }) =>
-            `flex flex-col items-center justify-center h-full transition-colors ${
-              isActive ? 'text-[#071A3D] font-semibold border-t-2 border-[#FF7A00]' : ''
+            `flex flex-col items-center justify-center h-full border-t-2 transition-colors ${
+              isActive
+                ? 'text-[#071A3D] font-semibold border-[#FF7A00]'
+                : 'border-transparent hover:text-[#071A3D]'
             }`
           }
         >
@@ -652,7 +634,7 @@ export const PublicLayout: React.FC<{ children: React.ReactNode }> = ({ children
         <button
           type="button"
           onClick={() => setMobileMenuOpen(true)}
-          className="flex flex-col items-center justify-center h-full text-[#64748B] hover:text-[#071A3D] cursor-pointer"
+          className="flex flex-col items-center justify-center h-full border-t-2 border-transparent text-[#64748B] hover:text-[#071A3D] cursor-pointer"
         >
           <span>More</span>
         </button>
@@ -668,16 +650,20 @@ export const PublicLayout: React.FC<{ children: React.ReactNode }> = ({ children
           <div className="relative w-72 max-w-[85vw] bg-white h-full overflow-y-auto p-5 flex flex-col justify-between z-10 animate-slide-in-left shadow-2xl">
             <div>
               <div className="flex items-center justify-between pb-4 border-b border-[#E2E8F0] gap-2">
-                <Link to="/" onClick={() => setMobileMenuOpen(false)} className="min-w-0">
+                <Link
+                  to="/"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="inline-flex items-center min-w-0"
+                >
                   <BrandLogo variant="compact" theme="light" />
                 </Link>
                 <button
                   type="button"
                   onClick={() => setMobileMenuOpen(false)}
                   aria-label="Close menu"
-                  className="p-1.5 text-[#64748B] hover:text-[#071A3D] shrink-0 cursor-pointer"
+                  className="inline-flex items-center justify-center w-8 h-8 rounded-md text-[#64748B] hover:text-[#071A3D] hover:bg-[#F6F8FB] shrink-0 cursor-pointer"
                 >
-                  <X className="w-5 h-5" />
+                  <X className="w-5 h-5 shrink-0" />
                 </button>
               </div>
 
@@ -713,7 +699,10 @@ export const PublicLayout: React.FC<{ children: React.ReactNode }> = ({ children
                   to="/saved"
                   className="flex items-center justify-between px-3 py-2 rounded-md hover:bg-[#F6F8FB] transition-colors"
                 >
-                  <span>Saved Bookmarks</span>
+                  <span className="inline-flex items-center gap-2">
+                    <Bookmark className="w-4 h-4 text-[#FF7A00] shrink-0" />
+                    <span>Saved Bookmarks</span>
+                  </span>
                   <span className="font-mono-tabular text-xs font-semibold text-[#FF7A00]">
                     {bookmarks.length}
                   </span>
@@ -785,9 +774,10 @@ export const PublicLayout: React.FC<{ children: React.ReactNode }> = ({ children
                 <button
                   type="button"
                   onClick={() => setSearchModalOpen(false)}
-                  className="p-1 text-[#64748B] hover:text-[#071A3D] shrink-0 cursor-pointer"
+                  aria-label="Close search modal"
+                  className="inline-flex items-center justify-center w-7 h-7 rounded text-[#64748B] hover:text-[#071A3D] shrink-0 cursor-pointer"
                 >
-                  <X className="w-5 h-5" />
+                  <X className="w-5 h-5 shrink-0" />
                 </button>
               </div>
 
