@@ -32,6 +32,10 @@ import {
 } from 'lucide-react';
 import { useCMS } from '../../context/CMSContext';
 import {
+  ClerkOwnerUserBadge,
+  useClerkRuntime,
+} from '../../context/ClerkProviderWrapper';
+import {
   Post,
   PostCategorySlug,
   CategoryItem,
@@ -93,6 +97,7 @@ export const AdminDashboardPage: React.FC = () => {
   } = useCMS();
 
   const navigate = useNavigate();
+  const { signOutClerk } = useClerkRuntime();
   const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<AdminTab>(() => {
     const qTab = searchParams.get('tab') as AdminTab | null;
@@ -154,10 +159,7 @@ export const AdminDashboardPage: React.FC = () => {
   }, [settings]);
 
   useEffect(() => {
-    if (
-      !isLoading &&
-      (!adminUser || adminUser.email.toLowerCase() !== OWNER_EMAIL)
-    ) {
+    if (!isLoading && !adminUser) {
       navigate('/8233538355/login', { replace: true });
     }
   }, [isLoading, adminUser, navigate]);
@@ -255,7 +257,7 @@ export const AdminDashboardPage: React.FC = () => {
     );
   }
 
-  if (!adminUser || adminUser.email.toLowerCase() !== OWNER_EMAIL) {
+  if (!adminUser) {
     return null;
   }
 
@@ -525,9 +527,14 @@ export const AdminDashboardPage: React.FC = () => {
               <ExternalLink className="w-3.5 h-3.5 shrink-0" />
             </Link>
 
+            <ClerkOwnerUserBadge />
+
             <button
               type="button"
               onClick={async () => {
+                if (signOutClerk) {
+                  await signOutClerk();
+                }
                 await logoutAdmin();
                 navigate('/8233538355/login');
               }}

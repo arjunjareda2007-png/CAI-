@@ -1,14 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Eye, EyeOff, Lock, ShieldCheck, AlertCircle, ArrowLeft } from 'lucide-react';
+import { Eye, EyeOff, Lock, ShieldCheck, AlertCircle, ArrowLeft, CheckCircle2 } from 'lucide-react';
 import { useCMS } from '../../context/CMSContext';
+import {
+  ClerkOwnerAuthControls,
+  useClerkRuntime,
+  CLERK_APP_ID,
+} from '../../context/ClerkProviderWrapper';
 import { SEOHead } from '../../components/SEOHead';
 import { BrandLogo } from '../../components/BrandLogo';
 
 const OWNER_EMAIL = 'arjunjareda2007@gmail.com';
 
 export const AdminLoginPage: React.FC = () => {
-  const { adminUser, loginWithCredentials, loginWithGoogle } = useCMS();
+  const { adminUser, loginWithCredentials } = useCMS();
+  const { isClerkConfigured, isClerkSignedIn } = useClerkRuntime();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -17,7 +23,7 @@ export const AdminLoginPage: React.FC = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (adminUser && adminUser.email.toLowerCase() === OWNER_EMAIL) {
+    if (adminUser) {
       navigate('/8233538355', { replace: true });
     }
   }, [adminUser, navigate]);
@@ -25,12 +31,17 @@ export const AdminLoginPage: React.FC = () => {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
-    if (email.trim().toLowerCase() !== OWNER_EMAIL) {
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail || !cleanEmail.includes('@')) {
+      setErrorMsg('Please enter a valid owner email address.');
+      return;
+    }
+    if (cleanEmail !== OWNER_EMAIL) {
       setErrorMsg('Access denied. This portal is restricted exclusively to the verified site owner.');
       return;
     }
     setLoading(true);
-    const res = await loginWithCredentials(email.trim(), password);
+    const res = await loginWithCredentials(cleanEmail, password);
     setLoading(false);
     if (res.ok) {
       navigate('/8233538355', { replace: true });
@@ -39,21 +50,9 @@ export const AdminLoginPage: React.FC = () => {
     }
   };
 
-  const handleGoogleLogin = async () => {
-    setErrorMsg(null);
-    setLoading(true);
-    const res = await loginWithGoogle();
-    setLoading(false);
-    if (res.ok) {
-      navigate('/8233538355', { replace: true });
-    } else {
-      setErrorMsg(res.error || 'Owner Google authentication failed.');
-    }
-  };
-
   return (
     <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-[#F6F8FB] flex flex-col justify-center py-8 sm:py-12 px-4 sm:px-6">
-      <SEOHead title="Owner Authentication Portal" canonicalPath="/owner-portal-cai/login" noIndex />
+      <SEOHead title="Owner Authentication Portal" canonicalPath="/8233538355/login" noIndex />
 
       <div className="w-full max-w-md mx-auto animate-fade-in-up">
         <div className="h-1 w-24 mx-auto flex mb-5 rounded overflow-hidden">
@@ -70,17 +69,45 @@ export const AdminLoginPage: React.FC = () => {
             Restricted Owner Security Portal
           </p>
           <p className="text-[11px] text-[#64748B] mt-0.5">
-            Authorized access exclusively for the verified Career Alert India owner
+            Secured via Clerk Authentication ({CLERK_APP_ID}) &amp; Owner Session Guard
           </p>
         </div>
 
-        <div className="mt-6 bg-white py-6 sm:py-8 px-5 sm:px-8 shadow-sm rounded-xl border border-[#E2E8F0]">
+        <div className="mt-6 bg-white py-6 sm:py-8 px-5 sm:px-8 shadow-sm rounded-xl border border-[#E2E8F0] space-y-5">
           {errorMsg && (
-            <div className="mb-5 p-3.5 rounded-lg bg-red-50 border border-red-300 flex items-start gap-2.5 text-xs text-red-900 animate-scale-in">
+            <div className="p-3.5 rounded-lg bg-red-50 border border-red-300 flex items-start gap-2.5 text-xs text-red-900">
               <AlertCircle className="w-4 h-4 text-[#DC2626] shrink-0 mt-0.5" />
               <span className="break-words">{errorMsg}</span>
             </div>
           )}
+
+          {/* Clerk Authentication Controls (SignInButton, SignUpButton, UserButton) */}
+          <div className="space-y-4">
+            <ClerkOwnerAuthControls redirectUrl="/8233538355" showEmbeddedSignIn />
+
+            {(isClerkSignedIn || adminUser) && (
+              <div className="p-3.5 rounded-lg bg-emerald-50 border border-emerald-200 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 text-xs font-semibold text-[#138A36]">
+                  <CheckCircle2 className="w-4 h-4 shrink-0" />
+                  <span>Clerk session verified. Entering Owner Command Center...</span>
+                </div>
+                <Link
+                  to="/8233538355"
+                  className="px-3 py-1.5 rounded bg-[#071A3D] text-white text-xs font-semibold whitespace-nowrap"
+                >
+                  Open Dashboard
+                </Link>
+              </div>
+            )}
+
+            <div className="flex items-center gap-3">
+              <div className="h-px bg-[#E2E8F0] flex-1" />
+              <span className="text-[11px] font-semibold uppercase text-[#64748B] whitespace-nowrap">
+                Or Direct Owner Key Login
+              </span>
+              <div className="h-px bg-[#E2E8F0] flex-1" />
+            </div>
+          </div>
 
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
@@ -124,7 +151,7 @@ export const AdminLoginPage: React.FC = () => {
                   type="button"
                   onClick={() => setShowPassword((prev) => !prev)}
                   aria-label={showPassword ? 'Hide password' : 'Show password'}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#64748B] hover:text-[#071A3D]"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#64748B] hover:text-[#071A3D] cursor-pointer"
                 >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
@@ -141,30 +168,13 @@ export const AdminLoginPage: React.FC = () => {
             </button>
           </form>
 
-          <div className="my-5 flex items-center gap-3">
-            <div className="h-px bg-[#E2E8F0] flex-1" />
-            <span className="text-[11px] font-semibold uppercase text-[#64748B] whitespace-nowrap">
-              Or Verified Firebase OAuth
-            </span>
-            <div className="h-px bg-[#E2E8F0] flex-1" />
-          </div>
-
-          <button
-            type="button"
-            disabled={loading}
-            onClick={handleGoogleLogin}
-            className="w-full py-2.5 px-4 rounded-md border border-[#E2E8F0] hover:border-[#071A3D] bg-white text-[#071A3D] text-xs font-semibold transition-all btn-press cursor-pointer"
-          >
-            Sign In with Verified Owner Google Account
-          </button>
-
-          <div className="mt-5 p-3.5 rounded-lg bg-[#F6F8FB] border border-[#E2E8F0] text-xs text-[#64748B] space-y-1.5">
+          <div className="p-3.5 rounded-lg bg-[#F6F8FB] border border-[#E2E8F0] text-xs text-[#64748B] space-y-1.5">
             <div className="flex items-center gap-1.5 font-semibold text-[#071A3D]">
               <ShieldCheck className="w-4 h-4 text-[#138A36] shrink-0" />
-              <span>Hardware & Session Protected Access</span>
+              <span>Clerk + HTTP-Only Session Protected Access</span>
             </div>
             <p className="text-[11px] leading-relaxed">
-              Protected by HTTP-only signed session tokens, brute-force rate limiting, and strict Firestore owner-only security rules.
+              Protected by Clerk Authentication ({CLERK_APP_ID}), HTTP-only signed session tokens, and brute-force rate limiting.
             </p>
           </div>
         </div>

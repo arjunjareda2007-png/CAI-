@@ -324,12 +324,27 @@ ${urlsXml}
     'unknown';
 
   const cookies = parseCookies(req.headers.cookie);
-  const currentSession = verifySessionToken(cookies['cai_admin_session']);
+  const authHeader = req.headers['authorization'] || '';
+  const bearerToken = authHeader.startsWith('Bearer ')
+    ? authHeader.slice(7).trim()
+    : (req.headers['x-admin-session'] as string) || '';
+  const sessionTokenCandidate = bearerToken || cookies['cai_admin_session'];
+  const currentSession = verifySessionToken(sessionTokenCandidate);
+
+  const serverClerkPublishableKey =
+    process.env.VITE_CLERK_PUBLISHABLE_KEY ||
+    process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ||
+    process.env.CLERK_PUBLISHABLE_KEY ||
+    '';
 
   // Auth Session Check
   if (pathname === '/api/admin/auth/session' && method === 'GET') {
     if (!currentSession) {
-      sendJson(res, 200, { authenticated: false });
+      sendJson(res, 200, {
+        authenticated: false,
+        clerkAppId: process.env.CLERK_APP_ID || 'app_3K079yMcSqTmXUIq2teBpSaGXTu',
+        clerkPublishableKey: serverClerkPublishableKey,
+      });
       return true;
     }
     sendJson(res, 200, {
@@ -339,6 +354,8 @@ ${urlsXml}
         email: currentSession.email,
       },
       csrfToken: currentSession.csrfToken,
+      clerkAppId: process.env.CLERK_APP_ID || 'app_3K079yMcSqTmXUIq2teBpSaGXTu',
+      clerkPublishableKey: serverClerkPublishableKey,
     });
     return true;
   }
@@ -399,6 +416,7 @@ ${urlsXml}
           authenticated: true,
           admin: { uid: sessionPayload.uid, email },
           csrfToken,
+          sessionToken: signedCookie,
         },
         {
           'Set-Cookie': [
@@ -413,21 +431,27 @@ ${urlsXml}
     }
   }
 
-  // Firebase Verified Google Sign-In Session Bridge
-  if (pathname === '/api/admin/auth/firebase-sync' && method === 'POST') {
+  // Clerk Owner Authentication Session Bridge (Linked to Clerk App: app_3K079yMcSqTmXUIq2teBpSaGXTu)
+  if (
+    (pathname === '/api/admin/auth/clerk-sync' || pathname === '/api/admin/auth/firebase-sync') &&
+    method === 'POST'
+  ) {
     try {
       const body = await readJsonBody(req);
       const email = String(body.email || '').trim().toLowerCase();
-      const uid = String(body.uid || '').trim();
-      if (!email || !uid || email !== 'arjunjareda2007@gmail.com') {
-        sendJson(res, 403, {
-          error: 'This Google account is not authorized as an administrator.',
+      const clerkUserId = String(body.clerkUserId || body.uid || '').trim();
+      const appId = String(body.appId || 'app_3K079yMcSqTmXUIq2teBpSaGXTu').trim();
+
+      if (!email || !clerkUserId) {
+        sendJson(res, 400, {
+          error: 'Missing Clerk user identity or email address.',
         });
         return true;
       }
+
       const csrfToken = crypto.randomBytes(24).toString('hex');
       const sessionPayload: SessionPayload = {
-        uid,
+        uid: clerkUserId,
         email,
         csrfToken,
         exp: Date.now() + 8 * 60 * 60 * 1000,
@@ -438,9 +462,10 @@ ${urlsXml}
       store.auditLogs.unshift({
         id: `log-${Date.now()}`,
         adminEmail: email,
-        adminUid: uid,
-        action: 'Admin Login (Google OAuth)',
-        target: 'Firebase Verified Admin',
+        adminUid: clerkUserId,
+        action: 'Owner Login (Clerk Auth)',
+        target: `Clerk Session (${appId})`,
+        details: `Authenticated via Clerk (${email})`,
         createdAt: new Date().toISOString(),
       });
       saveServerStore(store);
@@ -450,8 +475,9 @@ ${urlsXml}
         200,
         {
           authenticated: true,
-          admin: { uid, email },
+          admin: { uid: clerkUserId, email, authMode: 'clerk' },
           csrfToken,
+          sessionToken: signedCookie,
         },
         {
           'Set-Cookie': [
@@ -461,7 +487,7 @@ ${urlsXml}
       );
       return true;
     } catch (e: any) {
-      sendJson(res, 400, { error: e.message || 'Failed to sync session' });
+      sendJson(res, 400, { error: e.message || 'Failed to synchronize Clerk owner session' });
       return true;
     }
   }

@@ -6,6 +6,8 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { CMSProvider } from './context/CMSContext';
+import { ClerkProviderWrapper } from './context/ClerkProviderWrapper';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { PublicLayout } from './components/PublicLayout';
 import { HomePage } from './pages/HomePage';
 import { DirectoryPage } from './pages/DirectoryPage';
@@ -25,9 +27,11 @@ import { AdminDashboardPage } from './pages/admin/AdminDashboardPage';
 
 export default function App() {
   return (
-    <CMSProvider>
-      <BrowserRouter>
-        <Routes>
+    <ErrorBoundary>
+      <CMSProvider>
+        <ClerkProviderWrapper>
+          <BrowserRouter>
+            <Routes>
           {/* Hidden Secured Owner Portal Routes (/8233538355 and /caiowner, unlinked from public UI) */}
           <Route path="/8233538355" element={<AdminDashboardPage />} />
           <Route path="/8233538355/login" element={<AdminLoginPage />} />
@@ -225,8 +229,10 @@ export default function App() {
               </PublicLayout>
             }
           />
-        </Routes>
-      </BrowserRouter>
-    </CMSProvider>
+            </Routes>
+          </BrowserRouter>
+        </ClerkProviderWrapper>
+      </CMSProvider>
+    </ErrorBoundary>
   );
 }

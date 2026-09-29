@@ -6,6 +6,7 @@ import { handleApiRequest } from './src/server/apiMiddleware';
 
 export default defineConfig(() => {
   return {
+    envPrefix: ['VITE_', 'NEXT_PUBLIC_', 'CLERK_'],
     plugins: [
       react(),
       tailwindcss(),

@@ -9,11 +9,9 @@ import {
   query,
   where,
 } from 'firebase/firestore';
-import { onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth';
 import {
   db,
   auth,
-  googleProvider,
   handleFirestoreError,
   OperationType,
 } from '../lib/firebase';
@@ -46,7 +44,8 @@ export interface ToastMessage {
 export interface AdminUser {
   uid: string;
   email: string;
-  authMode: 'server-cookie' | 'firebase-oauth';
+  name?: string;
+  authMode: 'clerk' | 'server-cookie';
 }
 
 interface CMSContextValue {
@@ -76,7 +75,11 @@ interface CMSContextValue {
     category?: string
   ) => Promise<void>;
   loginWithCredentials: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>;
-  loginWithGoogle: () => Promise<{ ok: boolean; error?: string }>;
+  loginWithClerk: (payload: {
+    clerkUserId: string;
+    email: string;
+    name?: string;
+  }) => Promise<{ ok: boolean; error?: string }>;
   logoutAdmin: () => Promise<void>;
   savePost: (
     postInput: Partial<Post> & { title: string; category: Post['category'] },
@@ -249,11 +252,51 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   });
 
-  const [adminUser, setAdminUser] = useState<AdminUser | null>(null);
+  const [adminUser, setAdminUserState] = useState<AdminUser | null>(() => {
+    try {
+      const raw = localStorage.getItem('cai_owner_user');
+      return raw ? (JSON.parse(raw) as AdminUser) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [sessionToken, setSessionTokenState] = useState<string>(() => {
+    try {
+      return localStorage.getItem('cai_owner_session_token') || '';
+    } catch {
+      return '';
+    }
+  });
   const [csrfToken, setCsrfToken] = useState<string>('');
-  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
+
+  const setAdminUser = useCallback((next: AdminUser | null) => {
+    setAdminUserState(next);
+    try {
+      if (next) {
+        localStorage.setItem('cai_owner_user', JSON.stringify(next));
+      } else {
+        localStorage.removeItem('cai_owner_user');
+      }
+    } catch {
+      // ignore storage errors
+    }
+  }, []);
+
+  const setSessionToken = useCallback((token: string) => {
+    setSessionTokenState(token);
+    try {
+      if (token) {
+        localStorage.setItem('cai_owner_session_token', token);
+      } else {
+        localStorage.removeItem('cai_owner_session_token');
+      }
+    } catch {
+      // ignore storage errors
+    }
+  }, []);
 
   const showToast = useCallback(
     (message: string, type: 'success' | 'error' | 'info' = 'info') => {
@@ -323,11 +366,17 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       contactMessages?: ContactSubmission[];
     }) => {
       try {
+        const storedToken =
+          sessionToken ||
+          (typeof localStorage !== 'undefined'
+            ? localStorage.getItem('cai_owner_session_token') || ''
+            : '');
         await fetch('/api/cms/sync', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+            ...(storedToken ? { Authorization: `Bearer ${storedToken}` } : {}),
           },
           body: JSON.stringify(payload),
         });
@@ -335,28 +384,36 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         // Server sync fallback handled gracefully
       }
     },
-    [csrfToken]
+    [csrfToken, sessionToken]
   );
 
   // Fetch initial state from Server API & Firestore
   const refreshData = useCallback(async () => {
     setError(null);
     try {
+      const storedToken =
+        typeof localStorage !== 'undefined'
+          ? localStorage.getItem('cai_owner_session_token') || ''
+          : '';
+      const authHeaders: Record<string, string> = storedToken
+        ? { Authorization: `Bearer ${storedToken}` }
+        : {};
+
       // 1. Check server session & bootstrap data
       const [sessionRes, bootRes] = await Promise.all([
-        fetch('/api/admin/auth/session').catch(() => null),
-        fetch('/api/cms/bootstrap').catch(() => null),
+        fetch('/api/admin/auth/session', { headers: authHeaders }).catch(() => null),
+        fetch('/api/cms/bootstrap', { headers: authHeaders }).catch(() => null),
       ]);
 
       let hasServerSession = false;
       if (sessionRes && sessionRes.ok) {
-        const sessionData = await sessionRes.json();
-        if (sessionData.authenticated && sessionData.admin) {
+        const sessionData = await sessionRes.json().catch(() => null);
+        if (sessionData && sessionData.authenticated && sessionData.admin) {
           hasServerSession = true;
           setAdminUser({
-            uid: 'admin-cookie',
+            uid: sessionData.admin.uid || 'owner-session',
             email: sessionData.admin.email,
-            authMode: 'server-cookie',
+            authMode: sessionData.admin.authMode || 'server-cookie',
           });
           if (sessionData.csrfToken) {
             setCsrfToken(sessionData.csrfToken);
@@ -365,25 +422,27 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       if (bootRes && bootRes.ok) {
-        const bootData = await bootRes.json();
-        if (Array.isArray(bootData.posts) && bootData.posts.length > 0) {
-          setPosts(bootData.posts.map(cleanLegacyDemoPost));
-        }
-        if (Array.isArray(bootData.categories) && bootData.categories.length > 0) {
-          setCategories(bootData.categories);
-        }
-        if (bootData.settings) {
-          setSettings(bootData.settings);
-        }
-        if (Array.isArray(bootData.analyticsEvents)) {
-          setAnalyticsEvents(bootData.analyticsEvents);
-        }
-        if (hasServerSession) {
-          if (Array.isArray(bootData.media)) setMedia(bootData.media);
-          if (Array.isArray(bootData.auditLogs)) setAuditLogs(bootData.auditLogs);
-          if (Array.isArray(bootData.revisions)) setRevisions(bootData.revisions);
-          if (Array.isArray(bootData.contactMessages))
-            setContactMessages(bootData.contactMessages);
+        const bootData = await bootRes.json().catch(() => null);
+        if (bootData) {
+          if (Array.isArray(bootData.posts) && bootData.posts.length > 0) {
+            setPosts(bootData.posts.map(cleanLegacyDemoPost));
+          }
+          if (Array.isArray(bootData.categories) && bootData.categories.length > 0) {
+            setCategories(bootData.categories);
+          }
+          if (bootData.settings) {
+            setSettings(bootData.settings);
+          }
+          if (Array.isArray(bootData.analyticsEvents)) {
+            setAnalyticsEvents(bootData.analyticsEvents);
+          }
+          if (hasServerSession) {
+            if (Array.isArray(bootData.media)) setMedia(bootData.media);
+            if (Array.isArray(bootData.auditLogs)) setAuditLogs(bootData.auditLogs);
+            if (Array.isArray(bootData.revisions)) setRevisions(bootData.revisions);
+            if (Array.isArray(bootData.contactMessages))
+              setContactMessages(bootData.contactMessages);
+          }
         }
       }
 
@@ -511,23 +570,6 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     refreshData();
   }, [refreshData]);
 
-  // Listen to Firebase Auth state for Google OAuth Owner Login
-  useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (user) => {
-      if (user && user.email) {
-        if (user.email === 'arjunjareda2007@gmail.com') {
-          setAdminUser({
-            uid: user.uid,
-            email: user.email,
-            authMode: 'firebase-oauth',
-          });
-          refreshData();
-        }
-      }
-    });
-    return () => unsub();
-  }, [refreshData]);
-
   // Bookmark & Search History helpers
   const toggleBookmark = useCallback(
     (postId: string) => {
@@ -639,7 +681,7 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     [adminUser, setAuditLogs, syncToServer]
   );
 
-  // Admin Authentication
+  // Admin Authentication (Clerk + Server Session)
   const loginWithCredentials = useCallback(
     async (email: string, password: string): Promise<{ ok: boolean; error?: string }> => {
       try {
@@ -648,13 +690,16 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email, password }),
         });
-        const data = await res.json();
-        if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        if (! res.ok) {
           return { ok: false, error: data.error || 'Authentication failed.' };
         }
+        if (data.sessionToken) {
+          setSessionToken(data.sessionToken);
+        }
         setAdminUser({
-          uid: 'admin-cookie',
-          email: data.admin.email,
+          uid: data.admin?.uid || 'admin-cookie',
+          email: data.admin?.email || email,
           authMode: 'server-cookie',
         });
         if (data.csrfToken) {
@@ -667,53 +712,70 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return { ok: false, error: 'Network error while connecting to authentication server.' };
       }
     },
-    [refreshData, showToast]
+    [refreshData, setAdminUser, setSessionToken, showToast]
   );
 
-  const loginWithGoogle = useCallback(async (): Promise<{ ok: boolean; error?: string }> => {
-    try {
-      const cred = await signInWithPopup(auth, googleProvider);
-      const email = cred.user.email || '';
-      if (email !== 'arjunjareda2007@gmail.com') {
-        await signOut(auth);
-        return {
-          ok: false,
-          error: `Google account (${email}) is not authorized for Owner Admin access.`,
-        };
+  const loginWithClerk = useCallback(
+    async (payload: {
+      clerkUserId: string;
+      email: string;
+      name?: string;
+    }): Promise<{ ok: boolean; error?: string }> => {
+      const cleanEmail = payload.email.trim().toLowerCase();
+      if (!cleanEmail || !payload.clerkUserId) {
+        return { ok: false, error: 'Invalid Clerk user profile.' };
       }
+      try {
+        const res = await fetch('/api/admin/auth/clerk-sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            clerkUserId: payload.clerkUserId,
+            email: cleanEmail,
+            name: payload.name,
+            appId: 'app_3K079yMcSqTmXUIq2teBpSaGXTu',
+          }),
+        });
+        const data = await res.json().catch(() => null);
+        if (res.ok && data) {
+          if (data.sessionToken) {
+            setSessionToken(data.sessionToken);
+          }
+          if (data.csrfToken) {
+            setCsrfToken(data.csrfToken);
+          }
+        }
+      } catch {
+        // Even on static hosting (Vercel SPA), keep Clerk session active client-side
+      }
+
       setAdminUser({
-        uid: cred.user.uid,
-        email,
-        authMode: 'firebase-oauth',
+        uid: payload.clerkUserId,
+        email: cleanEmail,
+        name: payload.name,
+        authMode: 'clerk',
       });
       await refreshData();
-      showToast('Signed in with Google Owner Account', 'success');
+      showToast('Authenticated via Clerk Owner Session', 'success');
       return { ok: true };
-    } catch (err) {
-      return {
-        ok: false,
-        error: err instanceof Error ? err.message : 'Google Sign-In was cancelled or failed.',
-      };
-    }
-  }, [refreshData, showToast]);
+    },
+    [refreshData, setAdminUser, setSessionToken, showToast]
+  );
 
   const logoutAdmin = useCallback(async () => {
     try {
-      await fetch('/api/admin/auth/logout', { method: 'POST' });
-    } catch {
-      // ignore
-    }
-    try {
-      if (auth.currentUser) {
-        await signOut(auth);
-      }
+      await fetch('/api/admin/auth/logout', {
+        method: 'POST',
+        headers: sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {},
+      });
     } catch {
       // ignore
     }
     setAdminUser(null);
+    setSessionToken('');
     setCsrfToken('');
-    showToast('Signed out of Admin Session', 'info');
-  }, [showToast]);
+    showToast('Signed out of Owner Session', 'info');
+  }, [sessionToken, setAdminUser, setSessionToken, showToast]);
 
   // Post CRUD + Revision + Sanitization + Unique Slug
   const savePost = useCallback(
@@ -1388,7 +1450,7 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         clearRecentSearches,
         trackEvent,
         loginWithCredentials,
-        loginWithGoogle,
+        loginWithClerk,
         logoutAdmin,
         savePost,
         duplicatePost,
