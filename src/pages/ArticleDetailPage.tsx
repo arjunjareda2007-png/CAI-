@@ -4,6 +4,7 @@ import {
   Bookmark,
   Share2,
   Copy,
+  Check,
   ExternalLink,
   AlertTriangle,
   Clock,
@@ -15,6 +16,10 @@ import { useCMS } from '../context/CMSContext';
 import { SEOHead } from '../components/SEOHead';
 import { UpdateCard } from '../components/UpdateCard';
 import { ShareModal } from '../components/ShareModal';
+import {
+  buildFormattedShareMessage,
+  copyTextReliable,
+} from '../utils/shareUtils';
 import {
   computePostStatus,
   formatIndianDate,
@@ -73,6 +78,7 @@ export const ArticleDetailPage: React.FC = () => {
 
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
   const [shareModalOpen, setShareModalOpen] = useState(false);
+  const [copiedInline, setCopiedInline] = useState(false);
 
   // Allow admins to preview draft/scheduled posts directly; match by slug or id so direct links always open
   const post = useMemo(() => {
@@ -103,12 +109,12 @@ export const ArticleDetailPage: React.FC = () => {
       .map((item) => item.candidate);
   }, [post, publishedPosts]);
 
-  const shareUrl = useMemo(() => {
-    if (!post) return '';
-    return typeof window !== 'undefined'
-      ? `${window.location.origin}/${post.category}/${post.slug}`
-      : `/${post.category}/${post.slug}`;
-  }, [post]);
+  const shareData = useMemo(() => {
+    if (!post) return null;
+    return buildFormattedShareMessage(post, settings.closingSoonThresholdDays);
+  }, [post, settings.closingSoonThresholdDays]);
+
+  const shareUrl = shareData?.directUrl || '';
 
   // Build Schema.org Structured Data (BreadcrumbList + Article/JobPosting + FAQPage)
   const structuredData = useMemo(() => {
@@ -233,12 +239,14 @@ export const ArticleDetailPage: React.FC = () => {
   const isSaved = bookmarks.includes(post.id);
 
   const handleCopyLink = async () => {
-    try {
-      await navigator.clipboard.writeText(shareUrl);
+    const ok = await copyTextReliable(shareUrl);
+    if (ok) {
+      setCopiedInline(true);
       trackEvent('share_click', `copy:${post.slug}`, post.category);
       showToast('Direct post link copied to clipboard!', 'success');
-    } catch {
-      showToast('Could not copy link automatically.', 'error');
+      setTimeout(() => setCopiedInline(false), 2500);
+    } else {
+      setShareModalOpen(true);
     }
   };
 
@@ -336,7 +344,6 @@ export const ArticleDetailPage: React.FC = () => {
           {/* Share & Bookmark Bar */}
           <div className="mt-5 pt-4 border-t border-[#E2E8F0] flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xs font-semibold text-[#64748B] mr-1">Share Update:</span>
               <button
                 type="button"
                 onClick={() => setShareModalOpen(true)}
@@ -345,35 +352,48 @@ export const ArticleDetailPage: React.FC = () => {
                 <Share2 className="w-3.5 h-3.5 text-[#FF7A00]" />
                 <span>Share</span>
               </button>
-              <a
-                href={`https://wa.me/?text=${encodeURIComponent(
-                  `🇮🇳 *CAREER ALERT INDIA (CAI)*\n*${post.title}*\n🏛️ ${post.organization} (${statusInfo.label})\n👉 Open Direct Post Link:\n${shareUrl}`
-                )}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={() => trackEvent('share_click', `whatsapp:${post.slug}`, post.category)}
-                className="btn-press px-3 py-1.5 rounded bg-[#138A36] hover:bg-[#10752D] text-white text-xs font-semibold transition-colors"
-              >
-                WhatsApp
-              </a>
-              <a
-                href={`https://t.me/share/url?url=${encodeURIComponent(
-                  shareUrl
-                )}&text=${encodeURIComponent(`🇮🇳 Career Alert India (CAI): ${post.title}`)}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={() => trackEvent('share_click', `telegram:${post.slug}`, post.category)}
-                className="btn-press px-3 py-1.5 rounded bg-[#0088CC] hover:bg-[#0077B5] text-white text-xs font-semibold transition-colors"
-              >
-                Telegram
-              </a>
+              {shareData && (
+                <>
+                  <a
+                    href={shareData.whatsappUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => trackEvent('share_click', `whatsapp:${post.slug}`, post.category)}
+                    className="btn-press px-3 py-1.5 rounded bg-[#138A36] hover:bg-[#10752D] text-white text-xs font-semibold transition-colors"
+                  >
+                    WhatsApp
+                  </a>
+                  <a
+                    href={shareData.telegramUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => trackEvent('share_click', `telegram:${post.slug}`, post.category)}
+                    className="btn-press px-3 py-1.5 rounded bg-[#0088CC] hover:bg-[#0077B5] text-white text-xs font-semibold transition-colors"
+                  >
+                    Telegram
+                  </a>
+                </>
+              )}
               <button
                 type="button"
                 onClick={handleCopyLink}
-                className="btn-press inline-flex items-center gap-1.5 px-3 py-1.5 rounded border border-[#E2E8F0] hover:border-[#071A3D] text-xs font-semibold text-[#071A3D] transition-colors cursor-pointer"
+                className={`btn-press inline-flex items-center gap-1.5 px-3 py-1.5 rounded border text-xs font-semibold transition-colors cursor-pointer ${
+                  copiedInline
+                    ? 'border-[#138A36] bg-[#138A36]/10 text-[#138A36]'
+                    : 'border-[#E2E8F0] hover:border-[#071A3D] text-[#071A3D]'
+                }`}
               >
-                <Copy className="w-3.5 h-3.5" />
-                <span>Copy Direct Link</span>
+                {copiedInline ? (
+                  <>
+                    <Check className="w-3.5 h-3.5" />
+                    <span>Copied!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3.5 h-3.5" />
+                    <span>Copy Link</span>
+                  </>
+                )}
               </button>
             </div>
 

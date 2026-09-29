@@ -61,18 +61,20 @@ export const UpdateCard: React.FC<UpdateCardProps> = ({ post, compact = false })
             )}
           </div>
 
-          <div className="flex items-center gap-1 shrink-0">
+          <div className="flex items-center gap-1.5 shrink-0">
             <button
               type="button"
               onClick={(e) => {
                 e.preventDefault();
+                e.stopPropagation();
                 setShareOpen(true);
               }}
               aria-label={`Share ${post.title}`}
               title="Share"
-              className="btn-press p-1.5 rounded text-[#64748B] hover:text-[#071A3D] hover:bg-slate-100 cursor-pointer"
+              className="btn-press inline-flex items-center gap-1 px-2 py-1 rounded border border-[#E2E8F0] hover:border-[#071A3D] text-[11px] font-semibold text-[#071A3D] hover:bg-[#F6F8FB] cursor-pointer"
             >
-              <Share2 className="w-4 h-4" />
+              <Share2 className="w-3.5 h-3.5 text-[#FF7A00]" />
+              <span>Share</span>
             </button>
 
             <button
