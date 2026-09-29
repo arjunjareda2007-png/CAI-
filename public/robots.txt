@@ -1,0 +1,22 @@
+User-agent: *
+Allow: /
+Disallow: /8233538355
+Disallow: /8233538355/
+Disallow: /caiowner
+Disallow: /caiowner/
+Disallow: /owner-portal-cai
+Disallow: /owner-portal-cai/
+Disallow: /admin
+Disallow: /admin/
+Disallow: /api/
+
+User-agent: Googlebot
+Allow: /
+Disallow: /8233538355
+Disallow: /caiowner
+Disallow: /owner-portal-cai
+Disallow: /admin
+Disallow: /api/
+
+Host: https://cai.foldedpage.in
+Sitemap: https://cai.foldedpage.in/sitemap.xml

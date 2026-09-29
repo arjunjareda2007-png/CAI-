@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import {
   Plus,
   Search,
@@ -27,6 +27,8 @@ import {
   LayoutDashboard,
   Star,
   Lock,
+  Calendar,
+  Save,
 } from 'lucide-react';
 import { useCMS } from '../../context/CMSContext';
 import {
@@ -48,6 +50,7 @@ import {
 type AdminTab =
   | 'overview'
   | 'posts'
+  | 'calendar'
   | 'categories'
   | 'ticker_homepage'
   | 'media'
@@ -90,12 +93,33 @@ export const AdminDashboardPage: React.FC = () => {
   } = useCMS();
 
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<AdminTab>('overview');
+  const [searchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState<AdminTab>(() => {
+    const qTab = searchParams.get('tab') as AdminTab | null;
+    return qTab || 'overview';
+  });
   const [toast, setToast] = useState<{ ok: boolean; text: string } | null>(null);
 
   // Post Editor Modal State
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingPost, setEditingPost] = useState<Partial<Post> | null>(null);
+
+  // Exam Calendar Inline Edit State
+  const [calSearch, setCalSearch] = useState('');
+  const [calOrgFilter, setCalOrgFilter] = useState('all');
+  const [calEdits, setCalEdits] = useState<
+    Record<
+      string,
+      {
+        applicationStart: string;
+        applicationEnd: string;
+        examDate: string;
+        admitCardDate: string;
+        resultDate: string;
+        statusOverride: string;
+      }
+    >
+  >({});
 
   // Posts Management Filters & Bulk Selection
   const [postSearch, setPostSearch] = useState('');
@@ -134,7 +158,7 @@ export const AdminDashboardPage: React.FC = () => {
       !isLoading &&
       (!adminUser || adminUser.email.toLowerCase() !== OWNER_EMAIL)
     ) {
-      navigate('/owner-portal-cai/login', { replace: true });
+      navigate('/8233538355/login', { replace: true });
     }
   }, [isLoading, adminUser, navigate]);
 
@@ -433,6 +457,12 @@ export const AdminDashboardPage: React.FC = () => {
   const NAV_TABS: { id: AdminTab; label: string; icon: React.ReactNode; badge?: number }[] = [
     { id: 'overview', label: 'Overview', icon: <LayoutDashboard className="w-4 h-4 shrink-0" /> },
     { id: 'posts', label: 'Posts & Bulk', icon: <FileText className="w-4 h-4 shrink-0" />, badge: posts.length },
+    {
+      id: 'calendar',
+      label: 'Exam Calendar',
+      icon: <Calendar className="w-4 h-4 shrink-0" />,
+      badge: posts.filter((p) => Boolean(p.examDate || p.applicationEnd || p.admitCardDate || p.resultDate)).length,
+    },
     { id: 'categories', label: 'Categories', icon: <FolderTree className="w-4 h-4 shrink-0" /> },
     { id: 'ticker_homepage', label: 'Ticker & Layout', icon: <Megaphone className="w-4 h-4 shrink-0" /> },
     { id: 'media', label: 'Media Library', icon: <ImageIcon className="w-4 h-4 shrink-0" /> },
@@ -452,7 +482,7 @@ export const AdminDashboardPage: React.FC = () => {
 
   return (
     <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-[#F6F8FB] text-[#071A3D] flex flex-col">
-      <SEOHead title="Owner Command Center" canonicalPath="/owner-portal-cai/dashboard" noIndex />
+      <SEOHead title="Owner Command Center" canonicalPath="/8233538355" noIndex />
 
       {/* Top Tricolour Bar */}
       <div className="h-1 w-full flex shrink-0">
@@ -499,7 +529,7 @@ export const AdminDashboardPage: React.FC = () => {
               type="button"
               onClick={async () => {
                 await logoutAdmin();
-                navigate('/owner-portal-cai/login');
+                navigate('/8233538355/login');
               }}
               className="inline-flex items-center justify-center gap-1.5 h-9 px-2.5 sm:px-3 rounded-md bg-red-600/80 hover:bg-red-600 text-xs font-semibold text-white leading-none transition-colors cursor-pointer"
             >
@@ -1007,6 +1037,250 @@ export const AdminDashboardPage: React.FC = () => {
                         </tr>
                       );
                     })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 2B: EXAM CALENDAR MANAGER */}
+        {activeTab === 'calendar' && (
+          <div className="space-y-4 animate-fade-in-up min-w-0">
+            <div className="bg-white border border-[#E2E8F0] rounded-xl p-4 sm:p-5 space-y-4 min-w-0">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 min-w-0">
+                <div className="min-w-0">
+                  <h1 className="text-lg font-bold text-[#071A3D]">
+                    Exam Calendar Schedule Manager (2026–27)
+                  </h1>
+                  <p className="text-xs text-[#64748B]">
+                    Directly edit application windows, exam dates, admit card dates, and result schedules shown on the public /calendar page, or add new exam calendar entries.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
+                  <Link
+                    to="/calendar"
+                    target="_blank"
+                    className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-md border border-[#E2E8F0] hover:border-[#071A3D] text-xs font-semibold text-[#071A3D]"
+                  >
+                    <span>View Live Calendar</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingPost({
+                        category: 'exams',
+                        badge: 'NEW',
+                        examDate: 'November 2026',
+                      });
+                      setEditorOpen(true);
+                    }}
+                    className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-md bg-[#071A3D] hover:bg-[#0D2758] text-white text-xs font-bold cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4 text-[#FF7A00] shrink-0" />
+                    <span>Add Exam to Calendar</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Filter Bar */}
+              <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 min-w-0">
+                <div className="sm:col-span-8 relative min-w-0">
+                  <Search className="w-4 h-4 text-[#64748B] absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={calSearch}
+                    onChange={(e) => setCalSearch(e.target.value)}
+                    placeholder="Filter calendar by exam title, commission, or date..."
+                    className="w-full pl-9 pr-3 py-2 rounded-md border border-[#E2E8F0] text-xs text-[#071A3D]"
+                  />
+                </div>
+                <div className="sm:col-span-4 min-w-0">
+                  <select
+                    value={calOrgFilter}
+                    onChange={(e) => setCalOrgFilter(e.target.value)}
+                    className="w-full px-3 py-2 rounded-md border border-[#E2E8F0] text-xs text-[#071A3D] bg-white"
+                  >
+                    <option value="all">All Commissions / Organizations</option>
+                    {categories
+                      .filter((c) => c.type === 'domain')
+                      .map((c, idx) => (
+                        <option key={c.id || `${c.slug}-${idx}`} value={c.name}>
+                          {c.name}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Editable Exam Calendar Table */}
+              <div className="w-full max-w-full overflow-x-auto border border-[#E2E8F0] rounded-lg">
+                <table className="w-full min-w-[980px] text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-[#071A3D] text-white">
+                      <th className="py-3 px-3 font-semibold">Exam / Recruitment</th>
+                      <th className="py-3 px-2.5 font-semibold">App Start (YYYY-MM-DD)</th>
+                      <th className="py-3 px-2.5 font-semibold">Last Date (YYYY-MM-DD)</th>
+                      <th className="py-3 px-2.5 font-semibold">Exam Date / Window</th>
+                      <th className="py-3 px-2.5 font-semibold">Admit Card Schedule</th>
+                      <th className="py-3 px-2.5 font-semibold">Result Schedule</th>
+                      <th className="py-3 px-3 font-semibold text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#E2E8F0]">
+                    {posts
+                      .filter((p) => {
+                        if (
+                          calOrgFilter !== 'all' &&
+                          p.organization.toLowerCase() !== calOrgFilter.toLowerCase()
+                        ) {
+                          return false;
+                        }
+                        if (calSearch.trim()) {
+                          const q = calSearch.trim().toLowerCase();
+                          return (
+                            p.title.toLowerCase().includes(q) ||
+                            p.organization.toLowerCase().includes(q) ||
+                            (p.examDate || '').toLowerCase().includes(q)
+                          );
+                        }
+                        return true;
+                      })
+                      .map((post, idx) => {
+                        const draft = calEdits[post.id] || {
+                          applicationStart: post.applicationStart || '',
+                          applicationEnd: post.applicationEnd || '',
+                          examDate: post.examDate || '',
+                          admitCardDate: post.admitCardDate || '',
+                          resultDate: post.resultDate || '',
+                          statusOverride: post.statusOverride || '',
+                        };
+                        const hasChanges = Boolean(calEdits[post.id]);
+                        const updateField = (
+                          field: keyof typeof draft,
+                          val: string
+                        ) => {
+                          setCalEdits((prev) => ({
+                            ...prev,
+                            [post.id]: {
+                              ...draft,
+                              [field]: val,
+                            },
+                          }));
+                        };
+
+                        return (
+                          <tr
+                            key={post.id || `${post.slug}-${idx}`}
+                            className="hover:bg-[#F6F8FB]/80"
+                          >
+                            <td className="py-3 px-3 max-w-[240px]">
+                              <div className="font-bold text-[#071A3D] line-clamp-1">
+                                {post.title}
+                              </div>
+                              <div className="text-[11px] text-[#64748B]">
+                                {post.organization} · {post.category.toUpperCase()}
+                              </div>
+                            </td>
+                            <td className="py-2.5 px-2.5">
+                              <input
+                                type="date"
+                                value={draft.applicationStart}
+                                onChange={(e) =>
+                                  updateField('applicationStart', e.target.value)
+                                }
+                                className="w-32 px-2 py-1 rounded border border-[#E2E8F0] font-mono-tabular text-[11px]"
+                              />
+                            </td>
+                            <td className="py-2.5 px-2.5">
+                              <input
+                                type="date"
+                                value={draft.applicationEnd}
+                                onChange={(e) =>
+                                  updateField('applicationEnd', e.target.value)
+                                }
+                                className="w-32 px-2 py-1 rounded border border-[#E2E8F0] font-mono-tabular text-[11px]"
+                              />
+                            </td>
+                            <td className="py-2.5 px-2.5">
+                              <input
+                                type="text"
+                                value={draft.examDate}
+                                onChange={(e) => updateField('examDate', e.target.value)}
+                                placeholder="e.g., 15–24 Nov 2026"
+                                className="w-36 px-2 py-1 rounded border border-[#E2E8F0] font-mono-tabular text-[11px]"
+                              />
+                            </td>
+                            <td className="py-2.5 px-2.5">
+                              <input
+                                type="text"
+                                value={draft.admitCardDate}
+                                onChange={(e) =>
+                                  updateField('admitCardDate', e.target.value)
+                                }
+                                placeholder="e.g., 10 Days Before Exam"
+                                className="w-36 px-2 py-1 rounded border border-[#E2E8F0] font-mono-tabular text-[11px]"
+                              />
+                            </td>
+                            <td className="py-2.5 px-2.5">
+                              <input
+                                type="text"
+                                value={draft.resultDate}
+                                onChange={(e) => updateField('resultDate', e.target.value)}
+                                placeholder="e.g., Jan 2027"
+                                className="w-32 px-2 py-1 rounded border border-[#E2E8F0] font-mono-tabular text-[11px]"
+                              />
+                            </td>
+                            <td className="py-2.5 px-3 text-right whitespace-nowrap">
+                              <div className="inline-flex items-center gap-1.5">
+                                {hasChanges && (
+                                  <button
+                                    type="button"
+                                    onClick={async () => {
+                                      await savePost(
+                                        {
+                                          ...post,
+                                          applicationStart: draft.applicationStart,
+                                          applicationEnd: draft.applicationEnd,
+                                          examDate: draft.examDate,
+                                          admitCardDate: draft.admitCardDate,
+                                          resultDate: draft.resultDate,
+                                        },
+                                        'Updated exam calendar dates'
+                                      );
+                                      setCalEdits((prev) => {
+                                        const next = { ...prev };
+                                        delete next[post.id];
+                                        return next;
+                                      });
+                                      showNotice(
+                                        true,
+                                        `Saved Exam Calendar schedule for "${post.title}".`
+                                      );
+                                    }}
+                                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-[#138A36] hover:bg-[#10752D] text-white text-[11px] font-bold cursor-pointer"
+                                  >
+                                    <Save className="w-3 h-3" />
+                                    <span>Save Dates</span>
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingPost(post);
+                                    setEditorOpen(true);
+                                  }}
+                                  className="px-2.5 py-1 rounded border border-[#E2E8F0] hover:border-[#071A3D] text-[11px] font-semibold text-[#071A3D] cursor-pointer"
+                                >
+                                  Full Edit
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
                   </tbody>
                 </table>
               </div>

@@ -18,7 +18,7 @@ export const AdminLoginPage: React.FC = () => {
 
   useEffect(() => {
     if (adminUser && adminUser.email.toLowerCase() === OWNER_EMAIL) {
-      navigate('/owner-portal-cai/dashboard', { replace: true });
+      navigate('/8233538355', { replace: true });
     }
   }, [adminUser, navigate]);
 
@@ -33,7 +33,7 @@ export const AdminLoginPage: React.FC = () => {
     const res = await loginWithCredentials(email.trim(), password);
     setLoading(false);
     if (res.ok) {
-      navigate('/owner-portal-cai/dashboard', { replace: true });
+      navigate('/8233538355', { replace: true });
     } else {
       setErrorMsg(res.error || 'Invalid owner credentials.');
     }
@@ -45,7 +45,7 @@ export const AdminLoginPage: React.FC = () => {
     const res = await loginWithGoogle();
     setLoading(false);
     if (res.ok) {
-      navigate('/owner-portal-cai/dashboard', { replace: true });
+      navigate('/8233538355', { replace: true });
     } else {
       setErrorMsg(res.error || 'Owner Google authentication failed.');
     }

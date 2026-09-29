@@ -26,10 +26,17 @@ export const SEOHead: React.FC<SEOHeadProps> = ({
     ? `${title} | ${settings.siteName}`
     : settings.defaultSeoTitle || `${settings.siteName} – ${settings.tagline}`;
   const metaDesc = description || settings.defaultSeoDescription;
-  const currentUrl =
-    typeof window !== 'undefined'
-      ? `${window.location.origin}${canonicalPath || window.location.pathname}`
-      : canonicalPath || '';
+
+  const preferredOrigin =
+    typeof window !== 'undefined' &&
+    window.location.hostname !== 'localhost' &&
+    !window.location.hostname.includes('run.app')
+      ? window.location.origin
+      : 'https://cai.foldedpage.in';
+
+  const resolvedPath =
+    canonicalPath || (typeof window !== 'undefined' ? window.location.pathname : '/');
+  const currentUrl = `${preferredOrigin}${resolvedPath.startsWith('/') ? resolvedPath : `/${resolvedPath}`}`;
 
   useEffect(() => {
     document.title = fullTitle;
@@ -44,24 +51,30 @@ export const SEOHead: React.FC<SEOHeadProps> = ({
       el.setAttribute('content', content);
     };
 
+    const robotsDirective = noIndex
+      ? 'noindex, nofollow'
+      : 'index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1';
+
+    setMeta('meta[name="title"]', 'name', 'title', fullTitle);
     setMeta('meta[name="description"]', 'name', 'description', metaDesc);
     setMeta('meta[property="og:title"]', 'property', 'og:title', fullTitle);
     setMeta('meta[property="og:description"]', 'property', 'og:description', metaDesc);
     setMeta('meta[property="og:type"]', 'property', 'og:type', ogType);
     setMeta('meta[property="og:url"]', 'property', 'og:url', currentUrl);
+    setMeta('meta[name="twitter:url"]', 'name', 'twitter:url', currentUrl);
     setMeta('meta[name="twitter:title"]', 'name', 'twitter:title', fullTitle);
     setMeta('meta[name="twitter:description"]', 'name', 'twitter:description', metaDesc);
-    setMeta(
-      'meta[name="robots"]',
-      'name',
-      'robots',
-      noIndex ? 'noindex, nofollow' : 'index, follow'
-    );
+    setMeta('meta[name="robots"]', 'name', 'robots', robotsDirective);
+    setMeta('meta[name="googlebot"]', 'name', 'googlebot', robotsDirective);
 
-    if (ogImage) {
-      setMeta('meta[property="og:image"]', 'property', 'og:image', ogImage);
-      setMeta('meta[name="twitter:image"]', 'name', 'twitter:image', ogImage);
-    }
+    const resolvedOgImage =
+      ogImage && ogImage.startsWith('http')
+        ? ogImage
+        : `${preferredOrigin}${ogImage || '/images/brand/logo.png'}`;
+
+    setMeta('meta[property="og:image"]', 'property', 'og:image', resolvedOgImage);
+    setMeta('meta[name="twitter:image"]', 'name', 'twitter:image', resolvedOgImage);
+    setMeta('meta[property="og:site_name"]', 'property', 'og:site_name', settings.siteName);
 
     let canonicalEl = document.querySelector('link[rel="canonical"]') as HTMLLinkElement | null;
     if (!canonicalEl) {
@@ -70,7 +83,7 @@ export const SEOHead: React.FC<SEOHeadProps> = ({
       document.head.appendChild(canonicalEl);
     }
     canonicalEl.setAttribute('href', currentUrl);
-  }, [fullTitle, metaDesc, ogType, currentUrl, ogImage, noIndex]);
+  }, [fullTitle, metaDesc, ogType, currentUrl, ogImage, noIndex, preferredOrigin, settings.siteName]);
 
   if (!structuredData) return null;
 

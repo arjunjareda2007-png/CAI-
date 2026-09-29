@@ -58,8 +58,8 @@ export const SavedUpdatesPage: React.FC = () => {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {savedPosts.map((post) => (
-              <UpdateCard key={post.id} post={post} />
+            {savedPosts.map((post, idx) => (
+              <UpdateCard key={post.id || `${post.slug}-${idx}`} post={post} />
             ))}
           </div>
         )}

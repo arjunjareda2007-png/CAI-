@@ -14,6 +14,7 @@ import {
 import { useCMS } from '../context/CMSContext';
 import { SEOHead } from '../components/SEOHead';
 import { UpdateCard } from '../components/UpdateCard';
+import { ShareModal } from '../components/ShareModal';
 import {
   computePostStatus,
   formatIndianDate,
@@ -71,11 +72,12 @@ export const ArticleDetailPage: React.FC = () => {
   } = useCMS();
 
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
+  const [shareModalOpen, setShareModalOpen] = useState(false);
 
-  // Allow admins to preview draft/scheduled posts directly
+  // Allow admins to preview draft/scheduled posts directly; match by slug or id so direct links always open
   const post = useMemo(() => {
     const pool = adminUser ? posts : publishedPosts;
-    return pool.find((p) => p.slug === slug);
+    return pool.find((p) => p.slug === slug || p.id === slug);
   }, [posts, publishedPosts, slug, adminUser]);
 
   useEffect(() => {
@@ -101,70 +103,16 @@ export const ArticleDetailPage: React.FC = () => {
       .map((item) => item.candidate);
   }, [post, publishedPosts]);
 
-  if (!post) {
-    return (
-      <div className="max-w-[960px] mx-auto px-4 sm:px-6 py-16 text-center">
-        <SEOHead title="Update Not Found" />
-        <h1 className="text-2xl sm:text-3xl font-bold text-[#071A3D]">
-          Update Not Found or Archived
-        </h1>
-        <p className="text-sm text-[#64748B] mt-2 max-w-md mx-auto">
-          The career update you are looking for may have been moved, archived, or does not exist at this URL.
-        </p>
-        <div className="mt-6 flex items-center justify-center gap-3">
-          <Link
-            to="/"
-            className="px-4 py-2 rounded-md bg-[#071A3D] text-white text-xs font-semibold"
-          >
-            Go Home
-          </Link>
-          <Link
-            to="/latest"
-            className="px-4 py-2 rounded-md border border-[#E2E8F0] bg-white text-[#071A3D] text-xs font-semibold"
-          >
-            Browse Latest Updates
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
-  const statusInfo = computePostStatus(post, settings.closingSoonThresholdDays, nowMs);
-  const isSaved = bookmarks.includes(post.id);
-  const shareUrl =
-    typeof window !== 'undefined'
+  const shareUrl = useMemo(() => {
+    if (!post) return '';
+    return typeof window !== 'undefined'
       ? `${window.location.origin}/${post.category}/${post.slug}`
       : `/${post.category}/${post.slug}`;
-
-  const handleCopyLink = async () => {
-    try {
-      await navigator.clipboard.writeText(shareUrl);
-      trackEvent('share_click', `copy:${post.slug}`, post.category);
-      showToast('Article link copied to clipboard.', 'success');
-    } catch {
-      showToast('Could not copy link automatically.', 'error');
-    }
-  };
-
-  const handleNativeShare = async () => {
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: post.title,
-          text: post.summary,
-          url: shareUrl,
-        });
-        trackEvent('share_click', `native:${post.slug}`, post.category);
-      } catch {
-        // user cancelled share
-      }
-    } else {
-      handleCopyLink();
-    }
-  };
+  }, [post]);
 
   // Build Schema.org Structured Data (BreadcrumbList + Article/JobPosting + FAQPage)
   const structuredData = useMemo(() => {
+    if (!post) return undefined;
     const graph: Array<Record<string, unknown>> = [
       {
         '@context': 'https://schema.org',
@@ -252,6 +200,47 @@ export const ArticleDetailPage: React.FC = () => {
 
     return graph;
   }, [post, shareUrl, settings.siteName]);
+
+  if (!post) {
+    return (
+      <div className="max-w-[960px] mx-auto px-4 sm:px-6 py-16 text-center">
+        <SEOHead title="Update Not Found" />
+        <h1 className="text-2xl sm:text-3xl font-bold text-[#071A3D]">
+          Update Not Found or Archived
+        </h1>
+        <p className="text-sm text-[#64748B] mt-2 max-w-md mx-auto">
+          The career update you are looking for may have been moved, archived, or does not exist at this URL.
+        </p>
+        <div className="mt-6 flex items-center justify-center gap-3">
+          <Link
+            to="/"
+            className="px-4 py-2 rounded-md bg-[#071A3D] text-white text-xs font-semibold"
+          >
+            Go Home
+          </Link>
+          <Link
+            to="/latest"
+            className="px-4 py-2 rounded-md border border-[#E2E8F0] bg-white text-[#071A3D] text-xs font-semibold"
+          >
+            Browse Latest Updates
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  const statusInfo = computePostStatus(post, settings.closingSoonThresholdDays, nowMs);
+  const isSaved = bookmarks.includes(post.id);
+
+  const handleCopyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      trackEvent('share_click', `copy:${post.slug}`, post.category);
+      showToast('Direct post link copied to clipboard!', 'success');
+    } catch {
+      showToast('Could not copy link automatically.', 'error');
+    }
+  };
 
   return (
     <>
@@ -348,43 +337,43 @@ export const ArticleDetailPage: React.FC = () => {
           <div className="mt-5 pt-4 border-t border-[#E2E8F0] flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs font-semibold text-[#64748B] mr-1">Share Update:</span>
+              <button
+                type="button"
+                onClick={() => setShareModalOpen(true)}
+                className="btn-press inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded bg-[#071A3D] hover:bg-[#0D2758] text-white text-xs font-semibold transition-colors cursor-pointer"
+              >
+                <Share2 className="w-3.5 h-3.5 text-[#FF7A00]" />
+                <span>Share</span>
+              </button>
               <a
-                href={`https://api.whatsapp.com/send?text=${encodeURIComponent(
-                  `${post.title} - Check dates & official link on Career Alert India: ${shareUrl}`
+                href={`https://wa.me/?text=${encodeURIComponent(
+                  `🇮🇳 *CAREER ALERT INDIA (CAI)*\n*${post.title}*\n🏛️ ${post.organization} (${statusInfo.label})\n👉 Open Direct Post Link:\n${shareUrl}`
                 )}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={() => trackEvent('share_click', `whatsapp:${post.slug}`, post.category)}
-                className="px-3 py-1.5 rounded bg-[#138A36] hover:bg-[#10752D] text-white text-xs font-semibold transition-colors"
+                className="btn-press px-3 py-1.5 rounded bg-[#138A36] hover:bg-[#10752D] text-white text-xs font-semibold transition-colors"
               >
                 WhatsApp
               </a>
               <a
                 href={`https://t.me/share/url?url=${encodeURIComponent(
                   shareUrl
-                )}&text=${encodeURIComponent(post.title)}`}
+                )}&text=${encodeURIComponent(`🇮🇳 Career Alert India (CAI): ${post.title}`)}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={() => trackEvent('share_click', `telegram:${post.slug}`, post.category)}
-                className="px-3 py-1.5 rounded bg-[#071A3D] hover:bg-[#0D2758] text-white text-xs font-semibold transition-colors"
+                className="btn-press px-3 py-1.5 rounded bg-[#0088CC] hover:bg-[#0077B5] text-white text-xs font-semibold transition-colors"
               >
                 Telegram
               </a>
               <button
                 type="button"
                 onClick={handleCopyLink}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded border border-[#E2E8F0] hover:border-[#071A3D] text-xs font-semibold text-[#071A3D] transition-colors"
+                className="btn-press inline-flex items-center gap-1.5 px-3 py-1.5 rounded border border-[#E2E8F0] hover:border-[#071A3D] text-xs font-semibold text-[#071A3D] transition-colors cursor-pointer"
               >
                 <Copy className="w-3.5 h-3.5" />
-                <span>Copy Link</span>
-              </button>
-              <button
-                type="button"
-                onClick={handleNativeShare}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded border border-[#E2E8F0] hover:border-[#071A3D] text-xs font-semibold text-[#071A3D] transition-colors"
-              >
-                <Share2 className="w-3.5 h-3.5" />
-                <span>Share</span>
+                <span>Copy Direct Link</span>
               </button>
             </div>
 
@@ -823,14 +812,18 @@ export const ArticleDetailPage: React.FC = () => {
                 </Link>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {relatedPosts.map((rel) => (
-                  <UpdateCard key={rel.id} post={rel} compact />
+                {relatedPosts.map((rel, idx) => (
+                  <UpdateCard key={rel.id || `${rel.slug}-${idx}`} post={rel} compact />
                 ))}
               </div>
             </section>
           )}
         </div>
       </div>
+
+      {shareModalOpen && (
+        <ShareModal post={post} onClose={() => setShareModalOpen(false)} />
+      )}
     </>
   );
 };

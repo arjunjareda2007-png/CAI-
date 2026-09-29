@@ -1,14 +1,17 @@
 import React, { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { Calendar, List, ArrowRight } from 'lucide-react';
+import { Calendar, List, ArrowRight, Share2, Edit3 } from 'lucide-react';
 import { useCMS } from '../context/CMSContext';
 import { SEOHead } from '../components/SEOHead';
+import { ShareModal } from '../components/ShareModal';
+import { Post } from '../types/cms';
 import { computePostStatus, formatIndianDate } from '../utils/statusAndSanitize';
 
 export const ExamCalendarPage: React.FC = () => {
-  const { publishedPosts, categories, settings } = useCMS();
+  const { publishedPosts, categories, settings, adminUser } = useCMS();
   const [viewMode, setViewMode] = useState<'list' | 'monthly'>('list');
   const [selectedOrg, setSelectedOrg] = useState<string>('All');
+  const [sharePost, setSharePost] = useState<Post | null>(null);
 
   const domainOrgs = useMemo(
     () =>
@@ -76,6 +79,16 @@ export const ExamCalendarPage: React.FC = () => {
 
             {/* View Toggle + Org Filter */}
             <div className="flex flex-wrap items-center gap-3">
+              {adminUser && (
+                <Link
+                  to="/8233538355?tab=calendar"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#FF7A00] hover:bg-[#E56D00] text-white text-xs font-semibold transition-colors"
+                >
+                  <Edit3 className="w-3.5 h-3.5" />
+                  <span>Edit Exam Calendar</span>
+                </Link>
+              )}
+
               <select
                 value={selectedOrg}
                 onChange={(e) => setSelectedOrg(e.target.value)}
@@ -83,8 +96,8 @@ export const ExamCalendarPage: React.FC = () => {
                 className="px-3 py-1.5 rounded-md border border-[#E2E8F0] bg-white text-xs font-semibold text-[#071A3D]"
               >
                 <option value="All">All Commissions</option>
-                {domainOrgs.map((o) => (
-                  <option key={o.id} value={o.name}>
+                {domainOrgs.map((o, idx) => (
+                  <option key={o.id || `${o.slug}-${idx}`} value={o.name}>
                     {o.name}
                   </option>
                 ))}
@@ -135,13 +148,14 @@ export const ExamCalendarPage: React.FC = () => {
                     <th className="py-3.5 px-4 font-semibold">Admit Card</th>
                     <th className="py-3.5 px-4 font-semibold">Result Date</th>
                     <th className="py-3.5 px-4 font-semibold">Status</th>
+                    <th className="py-3.5 px-4 font-semibold text-right">Share</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#E2E8F0]">
-                  {calendarEntries.map((post) => {
+                  {calendarEntries.map((post, idx) => {
                     const st = computePostStatus(post, settings.closingSoonThresholdDays);
                     return (
-                      <tr key={post.id} className="hover:bg-[#F6F8FB]">
+                      <tr key={post.id || `${post.slug}-${idx}`} className="hover:bg-[#F6F8FB]">
                         <td className="py-3.5 px-4 font-semibold text-[#071A3D]">
                           <Link
                             to={`/${post.category}/${post.slug}`}
@@ -174,6 +188,16 @@ export const ExamCalendarPage: React.FC = () => {
                             <span className={st.textClass}>{st.label}</span>
                           </span>
                         </td>
+                        <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                          <button
+                            type="button"
+                            onClick={() => setSharePost(post)}
+                            title="Share"
+                            className="p-1.5 rounded border border-[#E2E8F0] hover:border-[#071A3D] text-[#64748B] hover:text-[#071A3D] cursor-pointer"
+                          >
+                            <Share2 className="w-3.5 h-3.5" />
+                          </button>
+                        </td>
                       </tr>
                     );
                   })}
@@ -200,11 +224,11 @@ export const ExamCalendarPage: React.FC = () => {
                   </p>
                 ) : (
                   <div className="divide-y divide-[#E2E8F0]">
-                    {items.map((post) => {
+                    {items.map((post, idx) => {
                       const st = computePostStatus(post, settings.closingSoonThresholdDays);
                       return (
                         <div
-                          key={post.id}
+                          key={post.id || `${post.slug}-${idx}`}
                           className="p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-[#F6F8FB]"
                         >
                           <div>
@@ -240,13 +264,24 @@ export const ExamCalendarPage: React.FC = () => {
                             </div>
                           </div>
 
-                          <Link
-                            to={`/${post.category}/${post.slug}`}
-                            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-md bg-[#071A3D] text-white text-xs font-semibold whitespace-nowrap self-start md:self-center"
-                          >
-                            <span>View Schedule</span>
-                            <ArrowRight className="w-3.5 h-3.5" />
-                          </Link>
+                          <div className="flex items-center gap-2 self-start md:self-center">
+                            <button
+                              type="button"
+                              onClick={() => setSharePost(post)}
+                              title="Share"
+                              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md border border-[#E2E8F0] hover:border-[#071A3D] text-xs font-semibold text-[#071A3D] cursor-pointer"
+                            >
+                              <Share2 className="w-3.5 h-3.5 text-[#FF7A00]" />
+                              <span>Share</span>
+                            </button>
+                            <Link
+                              to={`/${post.category}/${post.slug}`}
+                              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-md bg-[#071A3D] text-white text-xs font-semibold whitespace-nowrap"
+                            >
+                              <span>View Schedule</span>
+                              <ArrowRight className="w-3.5 h-3.5" />
+                            </Link>
+                          </div>
                         </div>
                       );
                     })}
@@ -257,6 +292,8 @@ export const ExamCalendarPage: React.FC = () => {
           </div>
         )}
       </div>
+
+      {sharePost && <ShareModal post={sharePost} onClose={() => setSharePost(null)} />}
     </>
   );
 };

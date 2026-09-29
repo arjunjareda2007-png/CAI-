@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Bookmark, ArrowRight, ExternalLink } from 'lucide-react';
+import { Bookmark, Share2, ArrowRight, ExternalLink } from 'lucide-react';
 import { Post } from '../types/cms';
 import {
   computePostStatus,
@@ -8,6 +8,7 @@ import {
   formatRelativeTime,
 } from '../utils/statusAndSanitize';
 import { useCMS } from '../context/CMSContext';
+import { ShareModal } from './ShareModal';
 
 interface UpdateCardProps {
   post: Post;
@@ -27,6 +28,7 @@ const CATEGORY_LABELS: Record<Post['category'], string> = {
 export const UpdateCard: React.FC<UpdateCardProps> = ({ post, compact = false }) => {
   const { settings, bookmarks, toggleBookmark, trackEvent } = useCMS();
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
+  const [shareOpen, setShareOpen] = useState(false);
 
   useEffect(() => {
     if (!post.applicationEnd) return;
@@ -59,21 +61,37 @@ export const UpdateCard: React.FC<UpdateCardProps> = ({ post, compact = false })
             )}
           </div>
 
-          <button
-            type="button"
-            onClick={(e) => {
-              e.preventDefault();
-              toggleBookmark(post.id);
-            }}
-            aria-label={isSaved ? 'Remove from saved updates' : 'Save update for later'}
-            className={`btn-press p-1.5 rounded shrink-0 cursor-pointer ${
-              isSaved
-                ? 'text-[#FF7A00] bg-[#FF7A00]/10'
-                : 'text-[#64748B] hover:text-[#071A3D] hover:bg-slate-100'
-            }`}
-          >
-            <Bookmark className="w-4 h-4" fill={isSaved ? 'currentColor' : 'none'} />
-          </button>
+          <div className="flex items-center gap-1 shrink-0">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                setShareOpen(true);
+              }}
+              aria-label={`Share ${post.title}`}
+              title="Share"
+              className="btn-press p-1.5 rounded text-[#64748B] hover:text-[#071A3D] hover:bg-slate-100 cursor-pointer"
+            >
+              <Share2 className="w-4 h-4" />
+            </button>
+
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                toggleBookmark(post.id);
+              }}
+              aria-label={isSaved ? 'Remove from saved updates' : 'Save update for later'}
+              title={isSaved ? 'Saved' : 'Save Update'}
+              className={`btn-press p-1.5 rounded cursor-pointer ${
+                isSaved
+                  ? 'text-[#FF7A00] bg-[#FF7A00]/10'
+                  : 'text-[#64748B] hover:text-[#071A3D] hover:bg-slate-100'
+              }`}
+            >
+              <Bookmark className="w-4 h-4" fill={isSaved ? 'currentColor' : 'none'} />
+            </button>
+          </div>
         </div>
 
         {/* Primary Title */}
@@ -205,6 +223,8 @@ export const UpdateCard: React.FC<UpdateCardProps> = ({ post, compact = false })
           </Link>
         </div>
       </div>
+
+      {shareOpen && <ShareModal post={post} onClose={() => setShareOpen(false)} />}
     </article>
   );
 };

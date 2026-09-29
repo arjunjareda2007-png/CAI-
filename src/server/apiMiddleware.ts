@@ -235,16 +235,29 @@ export async function handleApiRequest(
 
   // 1. Dynamic robots.txt
   if (pathname === '/robots.txt' && method === 'GET') {
-    const baseUrl = process.env.APP_URL || `https://${req.headers.host || 'careeralertindia.in'}`;
+    const baseUrl = process.env.APP_URL || 'https://cai.foldedpage.in';
     const robotsTxt = [
       'User-agent: *',
       'Allow: /',
+      'Disallow: /8233538355',
+      'Disallow: /8233538355/',
+      'Disallow: /caiowner',
+      'Disallow: /caiowner/',
       'Disallow: /owner-portal-cai',
       'Disallow: /owner-portal-cai/',
       'Disallow: /admin',
       'Disallow: /admin/',
       'Disallow: /api/',
       '',
+      'User-agent: Googlebot',
+      'Allow: /',
+      'Disallow: /8233538355',
+      'Disallow: /caiowner',
+      'Disallow: /owner-portal-cai',
+      'Disallow: /admin',
+      'Disallow: /api/',
+      '',
+      `Host: ${baseUrl.replace(/\/$/, '')}`,
       `Sitemap: ${baseUrl.replace(/\/$/, '')}/sitemap.xml`,
     ].join('\n');
     res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
@@ -255,7 +268,7 @@ export async function handleApiRequest(
   // 2. Dynamic sitemap.xml
   if (pathname === '/sitemap.xml' && method === 'GET') {
     const store = loadServerStore();
-    const baseUrl = (process.env.APP_URL || `https://${req.headers.host || 'careeralertindia.in'}`).replace(/\/$/, '');
+    const baseUrl = (process.env.APP_URL || 'https://cai.foldedpage.in').replace(/\/$/, '');
     const staticRoutes = [
       '',
       '/latest',
@@ -265,6 +278,7 @@ export async function handleApiRequest(
       '/admit-card',
       '/answer-key',
       '/syllabus',
+      '/notifications',
       '/calendar',
       '/about',
       '/contact',

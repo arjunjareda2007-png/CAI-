@@ -493,8 +493,8 @@ export const DirectoryPage: React.FC<DirectoryPageProps> = ({ section = 'latest'
             ) : (
               <>
                 <div className="space-y-3.5">
-                  {filteredPosts.slice(0, visibleCount).map((post) => (
-                    <UpdateCard key={post.id} post={post} />
+                  {filteredPosts.slice(0, visibleCount).map((post, idx) => (
+                    <UpdateCard key={post.id || `${post.slug}-${idx}`} post={post} />
                   ))}
                 </div>
 

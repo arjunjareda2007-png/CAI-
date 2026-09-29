@@ -70,12 +70,12 @@ export const PublicLayout: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Keyboard shortcuts:
   // - Ctrl+K / Cmd+K -> Open global search
-  // - Ctrl+Shift+L / Cmd+Shift+L -> Hidden Owner Portal navigation
+  // - Ctrl+Shift+L / Cmd+Shift+L -> Hidden Owner Portal navigation (/8233538355)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'l') {
         e.preventDefault();
-        navigate(adminUser ? '/owner-portal-cai/dashboard' : '/owner-portal-cai');
+        navigate(adminUser ? '/8233538355' : '/8233538355/login');
         return;
       }
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
@@ -98,7 +98,7 @@ export const PublicLayout: React.FC<{ children: React.ReactNode }> = ({ children
     }
     if (secretTapCountRef.current >= 5) {
       secretTapCountRef.current = 0;
-      navigate(adminUser ? '/owner-portal-cai/dashboard' : '/owner-portal-cai');
+      navigate(adminUser ? '/8233538355' : '/8233538355/login');
       return;
     }
     secretTapTimerRef.current = window.setTimeout(() => {

@@ -28,26 +28,34 @@ export default function App() {
     <CMSProvider>
       <BrowserRouter>
         <Routes>
-          {/* Hidden Owner Portal Routes (Strictly Owner-Only, unlinked from public UI) */}
+          {/* Hidden Secured Owner Portal Routes (/8233538355 and /caiowner, unlinked from public UI) */}
+          <Route path="/8233538355" element={<AdminDashboardPage />} />
+          <Route path="/8233538355/login" element={<AdminLoginPage />} />
+          <Route path="/8233538355/dashboard" element={<AdminDashboardPage />} />
+
+          <Route path="/caiowner" element={<AdminDashboardPage />} />
+          <Route path="/caiowner/login" element={<AdminLoginPage />} />
+          <Route path="/caiowner/dashboard" element={<AdminDashboardPage />} />
+
           <Route
             path="/owner-portal-cai"
-            element={<Navigate to="/owner-portal-cai/dashboard" replace />}
+            element={<Navigate to="/8233538355" replace />}
           />
           <Route path="/owner-portal-cai/login" element={<AdminLoginPage />} />
           <Route path="/owner-portal-cai/dashboard" element={<AdminDashboardPage />} />
 
-          {/* Legacy Admin Paths Redirected to Hidden Owner Portal */}
+          {/* Legacy Admin Paths Redirected to Secured Owner Portal */}
           <Route
             path="/admin"
-            element={<Navigate to="/owner-portal-cai/dashboard" replace />}
+            element={<Navigate to="/8233538355" replace />}
           />
           <Route
             path="/admin/login"
-            element={<Navigate to="/owner-portal-cai/login" replace />}
+            element={<Navigate to="/8233538355/login" replace />}
           />
           <Route
             path="/admin/dashboard"
-            element={<Navigate to="/owner-portal-cai/dashboard" replace />}
+            element={<Navigate to="/8233538355" replace />}
           />
 
           {/* Public Candidate Portal Routes */}
