@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" fill="none">
+  <defs>
+    <linearGradient id="ringGrad" x1="0" y1="0" x2="0" y2="200" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FF6B00" />
+      <stop offset="48%" stop-color="#FFFFFF" />
+      <stop offset="52%" stop-color="#FFFFFF" />
+      <stop offset="100%" stop-color="#138A36" />
+    </linearGradient>
+    <linearGradient id="sunGrad" x1="100" y1="24" x2="100" y2="110" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FDBA21" />
+      <stop offset="100%" stop-color="#FFF3C4" stop-opacity="0.2" />
+    </linearGradient>
+    <linearGradient id="navyGrad" x1="0" y1="0" x2="200" y2="200" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0B2559" />
+      <stop offset="100%" stop-color="#061533" />
+    </linearGradient>
+  </defs>
+  <circle cx="100" cy="100" r="96" fill="#FFFFFF" stroke="url(#ringGrad)" stroke-width="8" />
+  <circle cx="100" cy="76" r="42" fill="url(#sunGrad)" />
+  <!-- Open Tricolour Book -->
+  <path d="M44 96 C66 86, 88 92, 100 102 C112 92, 134 86, 156 96 L152 104 C132 95, 112 100, 100 109 C88 100, 68 95, 48 104 Z" fill="#FF6B00" />
+  <path d="M40 105 C64 95, 88 101, 100 110 C112 101, 136 95, 160 105 L156 113 C134 104, 112 109, 100 117 C88 109, 66 104, 44 113 Z" fill="#138A36" />
+  <!-- Graduation Cap -->
+  <polygon points="100,40 148,58 100,74 52,58" fill="url(#navyGrad)" />
+  <path d="M74 66 L74 86 C74 93, 126 93, 126 86 L126 66 L100 76 Z" fill="#071A3D" />
+  <path d="M132 63 L136 92" stroke="#F59E0B" stroke-width="4" stroke-linecap="round" />
+  <circle cx="136" cy="94" r="3.5" fill="#F59E0B" />
+  <!-- CAREER Text Band -->
+  <text x="100" y="138" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-weight="900" font-size="28" fill="#071A3D" letter-spacing="0.5">CAREER</text>
+  <!-- ALERT / INDIA Capsules -->
+  <rect x="26" y="145" width="72" height="22" rx="5" fill="#FF6B00" />
+  <text x="62" y="160" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-weight="800" font-size="14" fill="#FFFFFF">ALERT</text>
+  <rect x="102" y="145" width="72" height="22" rx="5" fill="#138A36" />
+  <text x="138" y="160" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-weight="800" font-size="14" fill="#FFFFFF">INDIA</text>
+  <!-- Chakra & Divider -->
+  <line x1="45" y1="175" x2="90" y2="175" stroke="#FF6B00" stroke-width="2.5" />
+  <circle cx="100" cy="175" r="5" stroke="#071A3D" stroke-width="1.8" fill="#FFFFFF" />
+  <line x1="110" y1="175" x2="155" y2="175" stroke="#138A36" stroke-width="2.5" />
+</svg>

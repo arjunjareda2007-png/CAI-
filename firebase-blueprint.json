@@ -1,0 +1,588 @@
+{
+  "entities": {
+    "Post": {
+      "title": "Post",
+      "description": "A career update article representing a job notification, exam, admit card, result, answer key, syllabus, or official announcement.",
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "description": "Headline title of the update",
+          "minLength": 3,
+          "maxLength": 250
+        },
+        "slug": {
+          "type": "string",
+          "description": "URL-friendly unique slug",
+          "minLength": 3,
+          "maxLength": 200,
+          "pattern": "^[a-z0-9\\-]+$"
+        },
+        "category": {
+          "type": "string",
+          "description": "Primary section category slug",
+          "enum": [
+            "jobs",
+            "exams",
+            "admit-card",
+            "results",
+            "answer-key",
+            "syllabus",
+            "notifications"
+          ]
+        },
+        "subcategory": {
+          "type": "string",
+          "description": "Optional subcategory or exam tier",
+          "maxLength": 120
+        },
+        "organization": {
+          "type": "string",
+          "description": "Recruiting body or examination authority (e.g., SSC, UPSC, Railway)",
+          "minLength": 2,
+          "maxLength": 120
+        },
+        "state": {
+          "type": "string",
+          "description": "Geographic applicability (e.g., All India, Rajasthan, Uttar Pradesh)",
+          "minLength": 2,
+          "maxLength": 80
+        },
+        "summary": {
+          "type": "string",
+          "description": "Editorial summary of the notification",
+          "minLength": 10,
+          "maxLength": 1000
+        },
+        "content": {
+          "type": "string",
+          "description": "Sanitized HTML/Rich text body content",
+          "maxLength": 50000
+        },
+        "status": {
+          "type": "string",
+          "description": "Publication lifecycle status",
+          "enum": ["draft", "published", "scheduled", "archived"]
+        },
+        "badge": {
+          "type": "string",
+          "description": "Editorial highlight badge",
+          "enum": [
+            "NONE",
+            "NEW",
+            "IMPORTANT",
+            "RESULT",
+            "ADMIT CARD",
+            "ANSWER KEY",
+            "LAST DATE",
+            "CLOSED",
+            "UPDATED"
+          ]
+        },
+        "featured": {
+          "type": "boolean",
+          "description": "Whether the update appears in featured and ticker slots"
+        },
+        "isDemo": {
+          "type": "boolean",
+          "description": "Marks sample/demo verification records that can be purged in one click"
+        },
+        "featuredImage": {
+          "type": "string",
+          "description": "Optional thumbnail or banner image URL",
+          "maxLength": 500
+        },
+        "qualification": {
+          "type": "string",
+          "description": "Primary minimum qualification filter tag (e.g., 10th Pass, 12th Pass, Graduate, Post Graduate)",
+          "maxLength": 150
+        },
+        "jobType": {
+          "type": "string",
+          "description": "Type of recruitment or exam level",
+          "maxLength": 100
+        },
+        "totalVacancies": {
+          "type": "number",
+          "description": "Total number of announced posts"
+        },
+        "location": {
+          "type": "string",
+          "description": "Job posting location",
+          "maxLength": 150
+        },
+        "salary": {
+          "type": "string",
+          "description": "Pay scale or salary matrix description",
+          "maxLength": 300
+        },
+        "applicationStart": {
+          "type": "string",
+          "description": "ISO date or YYYY-MM-DD when applications open",
+          "maxLength": 40
+        },
+        "applicationEnd": {
+          "type": "string",
+          "description": "ISO date or YYYY-MM-DDTHH:mm deadline for applications",
+          "maxLength": 40
+        },
+        "examDate": {
+          "type": "string",
+          "description": "Scheduled examination date",
+          "maxLength": 80
+        },
+        "admitCardDate": {
+          "type": "string",
+          "description": "Admit card release date or window",
+          "maxLength": 80
+        },
+        "resultDate": {
+          "type": "string",
+          "description": "Result declaration date or status",
+          "maxLength": 80
+        },
+        "resultStatus": {
+          "type": "string",
+          "description": "For results: Released, Expected, or Not Applicable",
+          "enum": ["none", "released", "expected"]
+        },
+        "answerKeyType": {
+          "type": "string",
+          "description": "For answer keys: Provisional, Final, or Not Applicable",
+          "enum": ["none", "provisional", "final", "official"]
+        },
+        "objectionDeadline": {
+          "type": "string",
+          "description": "Deadline for raising answer key objections",
+          "maxLength": 80
+        },
+        "officialSourceUrl": {
+          "type": "string",
+          "description": "Verified official website URL",
+          "maxLength": 500
+        },
+        "statusOverride": {
+          "type": "string",
+          "description": "Optional manual override for application status",
+          "maxLength": 80
+        },
+        "importantDates": {
+          "type": "array",
+          "description": "Bounded list of up to 20 structured date milestones"
+        },
+        "vacancies": {
+          "type": "array",
+          "description": "Bounded list of up to 30 post-wise vacancy rows"
+        },
+        "eligibility": {
+          "type": "object",
+          "description": "Structured eligibility criteria including education, age limits, relaxation, and nationality"
+        },
+        "fees": {
+          "type": "array",
+          "description": "Bounded list of up to 15 category-wise fee rows"
+        },
+        "selectionProcess": {
+          "type": "array",
+          "description": "Bounded list of up to 15 selection stages"
+        },
+        "howToApply": {
+          "type": "array",
+          "description": "Bounded list of up to 15 step-by-step application instructions"
+        },
+        "importantLinks": {
+          "type": "array",
+          "description": "Bounded list of up to 15 official action links"
+        },
+        "faqs": {
+          "type": "array",
+          "description": "Bounded list of up to 15 frequently asked questions"
+        },
+        "syllabusSections": {
+          "type": "array",
+          "description": "Bounded list of up to 20 subject-wise syllabus blocks"
+        },
+        "seoTitle": {
+          "type": "string",
+          "description": "Custom SEO title",
+          "maxLength": 160
+        },
+        "seoDescription": {
+          "type": "string",
+          "description": "Custom meta description",
+          "maxLength": 320
+        },
+        "canonicalUrl": {
+          "type": "string",
+          "description": "Optional canonical URL",
+          "maxLength": 500
+        },
+        "ogImage": {
+          "type": "string",
+          "description": "Custom OpenGraph share image URL",
+          "maxLength": 500
+        },
+        "tags": {
+          "type": "array",
+          "description": "Bounded list of up to 15 search keywords/tags"
+        },
+        "authorUid": {
+          "type": "string",
+          "description": "UID of the administrator who created the post",
+          "maxLength": 128
+        },
+        "scheduledFor": {
+          "type": "string",
+          "description": "ISO timestamp if status is scheduled",
+          "maxLength": 50
+        },
+        "publishedAt": {
+          "type": "string",
+          "description": "Human-readable or ISO publication timestamp",
+          "maxLength": 50
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server last updated timestamp"
+        }
+      },
+      "required": [
+        "title",
+        "slug",
+        "category",
+        "organization",
+        "state",
+        "summary",
+        "status",
+        "authorUid",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Category": {
+      "title": "Category",
+      "description": "A content or organization category managed by administrators.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 80
+        },
+        "slug": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 80,
+          "pattern": "^[a-z0-9\\-]+$"
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "type": {
+          "type": "string",
+          "enum": ["section", "domain"]
+        },
+        "order": {
+          "type": "number"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["name", "slug", "type", "order", "enabled", "createdAt", "updatedAt"]
+    },
+    "Revision": {
+      "title": "Revision",
+      "description": "Immutable snapshot of a Post stored whenever an administrator edits important content.",
+      "type": "object",
+      "properties": {
+        "postId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "postTitle": {
+          "type": "string",
+          "maxLength": 250
+        },
+        "changedBy": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "changeSummary": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "snapshot": {
+          "type": "object",
+          "description": "Snapshot map of post fields prior to or at revision"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["postId", "postTitle", "changedBy", "changeSummary", "snapshot", "createdAt"]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "Security and editorial activity record for administrator actions.",
+      "type": "object",
+      "properties": {
+        "adminEmail": {
+          "type": "string",
+          "maxLength": 150
+        },
+        "adminUid": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "action": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "target": {
+          "type": "string",
+          "maxLength": 250
+        },
+        "details": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["adminEmail", "adminUid", "action", "target", "createdAt"]
+    },
+    "MediaItem": {
+      "title": "MediaItem",
+      "description": "Validated image or PDF reference in the Admin Media Library.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 150
+        },
+        "url": {
+          "type": "string",
+          "minLength": 5,
+          "maxLength": 200000
+        },
+        "mimeType": {
+          "type": "string",
+          "enum": ["image/jpeg", "image/png", "image/webp", "image/svg+xml", "application/pdf"]
+        },
+        "sizeBytes": {
+          "type": "number"
+        },
+        "altText": {
+          "type": "string",
+          "maxLength": 250
+        },
+        "uploadedBy": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["name", "url", "mimeType", "sizeBytes", "altText", "uploadedBy", "createdAt"]
+    },
+    "SiteSettings": {
+      "title": "SiteSettings",
+      "description": "Global site configuration including WhatsApp channel URL, SEO defaults, and contact info.",
+      "type": "object",
+      "properties": {
+        "siteName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "tagline": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 150
+        },
+        "whatsappChannelUrl": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "telegramUrl": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "twitterUrl": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "contactEmail": {
+          "type": "string",
+          "maxLength": 150
+        },
+        "defaultSeoTitle": {
+          "type": "string",
+          "maxLength": 160
+        },
+        "defaultSeoDescription": {
+          "type": "string",
+          "maxLength": 320
+        },
+        "footerText": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "closingSoonThresholdDays": {
+          "type": "number"
+        },
+        "tickerEnabled": {
+          "type": "boolean"
+        },
+        "customTickerItems": {
+          "type": "array"
+        },
+        "isPublic": {
+          "type": "boolean"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "siteName",
+        "tagline",
+        "whatsappChannelUrl",
+        "contactEmail",
+        "defaultSeoTitle",
+        "defaultSeoDescription",
+        "footerText",
+        "closingSoonThresholdDays",
+        "tickerEnabled",
+        "isPublic",
+        "updatedAt"
+      ]
+    },
+    "ContactMessage": {
+      "title": "ContactMessage",
+      "description": "Public contact inquiry submitted via the /contact form.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "email": {
+          "type": "string",
+          "minLength": 5,
+          "maxLength": 150
+        },
+        "subject": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 200
+        },
+        "message": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 3000
+        },
+        "status": {
+          "type": "string",
+          "enum": ["unread", "read", "archived"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["name", "email", "subject", "message", "status", "createdAt"]
+    },
+    "AnalyticsEvent": {
+      "title": "AnalyticsEvent",
+      "description": "Anonymous interaction telemetry event for admin analytics.",
+      "type": "object",
+      "properties": {
+        "eventType": {
+          "type": "string",
+          "enum": [
+            "page_view",
+            "search",
+            "category_click",
+            "article_open",
+            "official_link_click",
+            "whatsapp_click",
+            "share_click"
+          ]
+        },
+        "target": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 250
+        },
+        "category": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["eventType", "target", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/posts/{postId}": {
+      "schema": { "$ref": "#/entities/Post" },
+      "description": "All career update articles (jobs, exams, admit cards, results, answer keys, syllabi)"
+    },
+    "/categories/{categoryId}": {
+      "schema": { "$ref": "#/entities/Category" },
+      "description": "Managed section and domain/organization categories"
+    },
+    "/revisions/{revisionId}": {
+      "schema": { "$ref": "#/entities/Revision" },
+      "description": "Post revision history records"
+    },
+    "/auditLogs/{logId}": {
+      "schema": { "$ref": "#/entities/AuditLog" },
+      "description": "Administrator security and editorial audit trail"
+    },
+    "/media/{mediaId}": {
+      "schema": { "$ref": "#/entities/MediaItem" },
+      "description": "Admin media library items"
+    },
+    "/settings/{settingId}": {
+      "schema": { "$ref": "#/entities/SiteSettings" },
+      "description": "Global site settings stored at /settings/global"
+    },
+    "/contactMessages/{msgId}": {
+      "schema": { "$ref": "#/entities/ContactMessage" },
+      "description": "Contact form submissions containing user email PII (admin-only read)"
+    },
+    "/analyticsEvents/{eventId}": {
+      "schema": { "$ref": "#/entities/AnalyticsEvent" },
+      "description": "Anonymous engagement events for the Admin Analytics Dashboard"
+    }
+  }
+}

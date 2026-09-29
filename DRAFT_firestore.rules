@@ -1,0 +1,293 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Pillar 0: Global Safety Net (Default-Deny Catch-All)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Global Primitives
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        (request.auth.token.email == 'arjunjareda2007@gmail.com' && request.auth.token.email_verified == true) ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    // Validation Blueprint: Post
+    function isValidPost(data) {
+      return data.keys().hasAll([
+        'title', 'slug', 'category', 'organization', 'state',
+        'summary', 'status', 'authorUid', 'createdAt', 'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'title', 'slug', 'category', 'subcategory', 'organization', 'state',
+        'summary', 'content', 'status', 'badge', 'featured', 'isDemo',
+        'featuredImage', 'qualification', 'jobType', 'totalVacancies',
+        'location', 'salary', 'applicationStart', 'applicationEnd',
+        'examDate', 'admitCardDate', 'resultDate', 'resultStatus',
+        'answerKeyType', 'objectionDeadline', 'officialSourceUrl',
+        'statusOverride', 'importantDates', 'vacancies', 'eligibility',
+        'fees', 'selectionProcess', 'howToApply', 'importantLinks',
+        'faqs', 'syllabusSections', 'seoTitle', 'seoDescription',
+        'canonicalUrl', 'ogImage', 'tags', 'authorUid', 'scheduledFor',
+        'publishedAt', 'createdAt', 'updatedAt'
+      ]) &&
+      data.title is string && data.title.size() >= 3 && data.title.size() <= 250 &&
+      data.slug is string && data.slug.size() >= 3 && data.slug.size() <= 200 && data.slug.matches('^[a-z0-9\\-]+$') &&
+      data.category is string && data.category in ['jobs', 'exams', 'admit-card', 'results', 'answer-key', 'syllabus', 'notifications'] &&
+      data.organization is string && data.organization.size() >= 2 && data.organization.size() <= 120 &&
+      data.state is string && data.state.size() >= 2 && data.state.size() <= 80 &&
+      data.summary is string && data.summary.size() >= 10 && data.summary.size() <= 1000 &&
+      data.status is string && data.status in ['draft', 'published', 'scheduled', 'archived'] &&
+      data.authorUid is string && data.authorUid.size() >= 1 && data.authorUid.size() <= 128 &&
+      (!('subcategory' in data) || (data.subcategory is string && data.subcategory.size() <= 120)) &&
+      (!('content' in data) || (data.content is string && data.content.size() <= 50000)) &&
+      (!('badge' in data) || (data.badge is string && data.badge in ['NONE', 'NEW', 'IMPORTANT', 'RESULT', 'ADMIT CARD', 'ANSWER KEY', 'LAST DATE', 'CLOSED', 'UPDATED'])) &&
+      (!('featured' in data) || data.featured is bool) &&
+      (!('isDemo' in data) || data.isDemo is bool) &&
+      (!('featuredImage' in data) || (data.featuredImage is string && data.featuredImage.size() <= 500)) &&
+      (!('qualification' in data) || (data.qualification is string && data.qualification.size() <= 150)) &&
+      (!('jobType' in data) || (data.jobType is string && data.jobType.size() <= 100)) &&
+      (!('totalVacancies' in data) || (data.totalVacancies is int || data.totalVacancies is float)) &&
+      (!('location' in data) || (data.location is string && data.location.size() <= 150)) &&
+      (!('salary' in data) || (data.salary is string && data.salary.size() <= 300)) &&
+      (!('applicationStart' in data) || (data.applicationStart is string && data.applicationStart.size() <= 40)) &&
+      (!('applicationEnd' in data) || (data.applicationEnd is string && data.applicationEnd.size() <= 40)) &&
+      (!('examDate' in data) || (data.examDate is string && data.examDate.size() <= 80)) &&
+      (!('admitCardDate' in data) || (data.admitCardDate is string && data.admitCardDate.size() <= 80)) &&
+      (!('resultDate' in data) || (data.resultDate is string && data.resultDate.size() <= 80)) &&
+      (!('resultStatus' in data) || (data.resultStatus is string && data.resultStatus in ['none', 'released', 'expected'])) &&
+      (!('answerKeyType' in data) || (data.answerKeyType is string && data.answerKeyType in ['none', 'provisional', 'final', 'official'])) &&
+      (!('objectionDeadline' in data) || (data.objectionDeadline is string && data.objectionDeadline.size() <= 80)) &&
+      (!('officialSourceUrl' in data) || (data.officialSourceUrl is string && data.officialSourceUrl.size() <= 500)) &&
+      (!('statusOverride' in data) || (data.statusOverride is string && data.statusOverride.size() <= 80)) &&
+      (!('importantDates' in data) || (data.importantDates is list && data.importantDates.size() <= 20)) &&
+      (!('vacancies' in data) || (data.vacancies is list && data.vacancies.size() <= 30)) &&
+      (!('eligibility' in data) || data.eligibility is map) &&
+      (!('fees' in data) || (data.fees is list && data.fees.size() <= 15)) &&
+      (!('selectionProcess' in data) || (data.selectionProcess is list && data.selectionProcess.size() <= 15)) &&
+      (!('howToApply' in data) || (data.howToApply is list && data.howToApply.size() <= 15)) &&
+      (!('importantLinks' in data) || (data.importantLinks is list && data.importantLinks.size() <= 15)) &&
+      (!('faqs' in data) || (data.faqs is list && data.faqs.size() <= 15)) &&
+      (!('syllabusSections' in data) || (data.syllabusSections is list && data.syllabusSections.size() <= 20)) &&
+      (!('seoTitle' in data) || (data.seoTitle is string && data.seoTitle.size() <= 160)) &&
+      (!('seoDescription' in data) || (data.seoDescription is string && data.seoDescription.size() <= 320)) &&
+      (!('canonicalUrl' in data) || (data.canonicalUrl is string && data.canonicalUrl.size() <= 500)) &&
+      (!('ogImage' in data) || (data.ogImage is string && data.ogImage.size() <= 500)) &&
+      (!('tags' in data) || (data.tags is list && data.tags.size() <= 15 && (data.tags.size() == 0 || data.tags[0] is string))) &&
+      (!('scheduledFor' in data) || (data.scheduledFor is string && data.scheduledFor.size() <= 50)) &&
+      (!('publishedAt' in data) || (data.publishedAt is string && data.publishedAt.size() <= 50)) &&
+      data.createdAt is string && data.createdAt.size() <= 50 &&
+      data.updatedAt is string && data.updatedAt.size() <= 50;
+    }
+
+    // Validation Blueprint: Category
+    function isValidCategory(data) {
+      return data.keys().hasAll(['name', 'slug', 'type', 'order', 'enabled', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['name', 'slug', 'description', 'type', 'order', 'enabled', 'createdAt', 'updatedAt']) &&
+        data.name is string && data.name.size() >= 2 && data.name.size() <= 80 &&
+        data.slug is string && data.slug.size() >= 2 && data.slug.size() <= 80 && data.slug.matches('^[a-z0-9\\-]+$') &&
+        (!('description' in data) || (data.description is string && data.description.size() <= 300)) &&
+        data.type is string && data.type in ['section', 'domain'] &&
+        (data.order is int || data.order is float) &&
+        data.enabled is bool &&
+        data.createdAt is string && data.createdAt.size() <= 50 &&
+        data.updatedAt is string && data.updatedAt.size() <= 50;
+    }
+
+    // Validation Blueprint: Revision
+    function isValidRevision(data) {
+      return data.keys().hasAll(['postId', 'postTitle', 'changedBy', 'changeSummary', 'snapshot', 'createdAt']) &&
+        data.keys().hasOnly(['postId', 'postTitle', 'changedBy', 'changeSummary', 'snapshot', 'createdAt']) &&
+        data.postId is string && data.postId.size() >= 1 && data.postId.size() <= 128 &&
+        data.postTitle is string && data.postTitle.size() >= 1 && data.postTitle.size() <= 250 &&
+        data.changedBy is string && data.changedBy.size() >= 1 && data.changedBy.size() <= 128 &&
+        data.changeSummary is string && data.changeSummary.size() >= 1 && data.changeSummary.size() <= 300 &&
+        data.snapshot is map &&
+        data.createdAt is string && data.createdAt.size() <= 50;
+    }
+
+    // Validation Blueprint: AuditLog
+    function isValidAuditLog(data) {
+      return data.keys().hasAll(['adminEmail', 'adminUid', 'action', 'target', 'createdAt']) &&
+        data.keys().hasOnly(['adminEmail', 'adminUid', 'action', 'target', 'details', 'createdAt']) &&
+        data.adminEmail is string && data.adminEmail.size() >= 3 && data.adminEmail.size() <= 150 &&
+        data.adminUid is string && data.adminUid.size() >= 1 && data.adminUid.size() <= 128 &&
+        data.action is string && data.action.size() >= 2 && data.action.size() <= 80 &&
+        data.target is string && data.target.size() >= 1 && data.target.size() <= 250 &&
+        (!('details' in data) || (data.details is string && data.details.size() <= 500)) &&
+        data.createdAt is string && data.createdAt.size() <= 50;
+    }
+
+    // Validation Blueprint: MediaItem
+    function isValidMediaItem(data) {
+      return data.keys().hasAll(['name', 'url', 'mimeType', 'sizeBytes', 'altText', 'uploadedBy', 'createdAt']) &&
+        data.keys().hasOnly(['name', 'url', 'mimeType', 'sizeBytes', 'altText', 'uploadedBy', 'createdAt']) &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 150 &&
+        data.url is string && data.url.size() >= 5 && data.url.size() <= 200000 &&
+        data.mimeType is string && data.mimeType in ['image/jpeg', 'image/png', 'image/webp', 'image/svg+xml', 'application/pdf'] &&
+        (data.sizeBytes is int || data.sizeBytes is float) && data.sizeBytes >= 0 && data.sizeBytes <= 5242880 &&
+        data.altText is string && data.altText.size() <= 250 &&
+        data.uploadedBy is string && data.uploadedBy.size() >= 1 && data.uploadedBy.size() <= 128 &&
+        data.createdAt is string && data.createdAt.size() <= 50;
+    }
+
+    // Validation Blueprint: SiteSettings
+    function isValidSiteSettings(data) {
+      return data.keys().hasAll([
+        'siteName', 'tagline', 'whatsappChannelUrl', 'contactEmail',
+        'defaultSeoTitle', 'defaultSeoDescription', 'footerText',
+        'closingSoonThresholdDays', 'tickerEnabled', 'isPublic', 'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'siteName', 'tagline', 'whatsappChannelUrl', 'telegramUrl', 'twitterUrl',
+        'contactEmail', 'defaultSeoTitle', 'defaultSeoDescription', 'footerText',
+        'closingSoonThresholdDays', 'tickerEnabled', 'customTickerItems', 'isPublic', 'updatedAt'
+      ]) &&
+      data.siteName is string && data.siteName.size() >= 2 && data.siteName.size() <= 100 &&
+      data.tagline is string && data.tagline.size() >= 2 && data.tagline.size() <= 150 &&
+      data.whatsappChannelUrl is string && data.whatsappChannelUrl.size() <= 500 &&
+      (!('telegramUrl' in data) || (data.telegramUrl is string && data.telegramUrl.size() <= 500)) &&
+      (!('twitterUrl' in data) || (data.twitterUrl is string && data.twitterUrl.size() <= 500)) &&
+      data.contactEmail is string && data.contactEmail.size() <= 150 &&
+      data.defaultSeoTitle is string && data.defaultSeoTitle.size() <= 160 &&
+      data.defaultSeoDescription is string && data.defaultSeoDescription.size() <= 320 &&
+      data.footerText is string && data.footerText.size() <= 500 &&
+      (data.closingSoonThresholdDays is int || data.closingSoonThresholdDays is float) &&
+      data.tickerEnabled is bool &&
+      (!('customTickerItems' in data) || (data.customTickerItems is list && data.customTickerItems.size() <= 15)) &&
+      data.isPublic is bool &&
+      data.updatedAt is string && data.updatedAt.size() <= 50;
+    }
+
+    // Validation Blueprint: ContactMessage
+    function isValidContactMessage(data) {
+      return data.keys().hasAll(['name', 'email', 'subject', 'message', 'status', 'createdAt']) &&
+        data.keys().hasOnly(['name', 'email', 'subject', 'message', 'status', 'createdAt']) &&
+        data.name is string && data.name.size() >= 2 && data.name.size() <= 100 &&
+        data.email is string && data.email.size() >= 5 && data.email.size() <= 150 &&
+        data.subject is string && data.subject.size() >= 3 && data.subject.size() <= 200 &&
+        data.message is string && data.message.size() >= 10 && data.message.size() <= 3000 &&
+        data.status is string && data.status in ['unread', 'read', 'archived'] &&
+        data.createdAt is string && data.createdAt.size() <= 50;
+    }
+
+    // Validation Blueprint: AnalyticsEvent
+    function isValidAnalyticsEvent(data) {
+      return data.keys().hasAll(['eventType', 'target', 'createdAt']) &&
+        data.keys().hasOnly(['eventType', 'target', 'category', 'createdAt']) &&
+        data.eventType is string && data.eventType in [
+          'page_view', 'search', 'category_click', 'article_open',
+          'official_link_click', 'whatsapp_click', 'share_click'
+        ] &&
+        data.target is string && data.target.size() >= 1 && data.target.size() <= 250 &&
+        (!('category' in data) || (data.category is string && data.category.size() <= 100)) &&
+        data.createdAt is string && data.createdAt.size() <= 50;
+    }
+
+    // Admins Registry Collection
+    match /admins/{adminUid} {
+      allow get: if isSignedIn() && isValidId(adminUid) && request.auth.uid == adminUid;
+      allow list: if false;
+      allow create, update, delete: if false;
+    }
+
+    // Connection Validation Doc
+    match /test/{docId} {
+      allow get: if isValidId(docId);
+      allow list, write: if false;
+    }
+
+    // 1. Posts Collection
+    match /posts/{postId} {
+      allow get: if isValidId(postId) && (existing().status == 'published' || isAdmin());
+      allow list: if existing().status == 'published' || isAdmin();
+      allow create: if isAdmin() && isValidId(postId) && isValidPost(incoming());
+      allow update: if isAdmin() && isValidId(postId) && isValidPost(incoming()) &&
+        incoming().createdAt == existing().createdAt;
+      allow delete: if isAdmin() && isValidId(postId);
+    }
+
+    // 2. Categories Collection
+    match /categories/{categoryId} {
+      allow get: if isValidId(categoryId) && (existing().enabled == true || isAdmin());
+      allow list: if existing().enabled == true || isAdmin();
+      allow create: if isAdmin() && isValidId(categoryId) && isValidCategory(incoming());
+      allow update: if isAdmin() && isValidId(categoryId) && isValidCategory(incoming()) &&
+        incoming().createdAt == existing().createdAt;
+      allow delete: if isAdmin() && isValidId(categoryId);
+    }
+
+    // 3. Revisions Collection
+    match /revisions/{revisionId} {
+      allow get: if isAdmin() && isValidId(revisionId);
+      allow list: if isAdmin() && existing().postId != '';
+      allow create: if isAdmin() && isValidId(revisionId) && isValidRevision(incoming());
+      allow update: if false;
+      allow delete: if isAdmin() && isValidId(revisionId);
+    }
+
+    // 4. Audit Logs Collection (Immutable Append-Only)
+    match /auditLogs/{logId} {
+      allow get: if isAdmin() && isValidId(logId);
+      allow list: if isAdmin() && existing().action != '';
+      allow create: if isAdmin() && isValidId(logId) && isValidAuditLog(incoming());
+      allow update, delete: if false;
+    }
+
+    // 5. Media Library Collection
+    match /media/{mediaId} {
+      allow get: if isAdmin() && isValidId(mediaId);
+      allow list: if isAdmin() && existing().name != '';
+      allow create: if isAdmin() && isValidId(mediaId) && isValidMediaItem(incoming());
+      allow update: if false;
+      allow delete: if isAdmin() && isValidId(mediaId);
+    }
+
+    // 6. Site Settings Collection
+    match /settings/{settingId} {
+      allow get: if isValidId(settingId) && (existing().isPublic == true || isAdmin());
+      allow list: if false;
+      allow create, update: if isAdmin() && isValidId(settingId) && isValidSiteSettings(incoming());
+      allow delete: if false;
+    }
+
+    // 7. Contact Messages Collection (PII Protected)
+    match /contactMessages/{msgId} {
+      allow get: if isAdmin() && isValidId(msgId);
+      allow list: if isAdmin() && existing().email != '';
+      allow create: if isValidId(msgId) && isValidContactMessage(incoming()) && incoming().status == 'unread';
+      allow update: if isAdmin() && isValidId(msgId) && isValidContactMessage(incoming()) &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['status']);
+      allow delete: if isAdmin() && isValidId(msgId);
+    }
+
+    // 8. Anonymous Analytics Events Collection
+    match /analyticsEvents/{eventId} {
+      allow get: if isAdmin() && isValidId(eventId);
+      allow list: if isAdmin() && existing().eventType != '';
+      allow create: if isValidId(eventId) && isValidAnalyticsEvent(incoming());
+      allow update, delete: if false;
+    }
+  }
+}

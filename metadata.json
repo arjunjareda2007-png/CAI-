@@ -1,0 +1,6 @@
+{
+  "name": "Career Alert India",
+  "description": "Reliable information on Indian government exams, competitive exams, recruitment notifications, admit cards, results, answer keys, and syllabi.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
