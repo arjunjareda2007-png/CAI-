@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import { useUser, useAuth, useClerk } from '@clerk/react';
 import {
   collection,
   doc,
@@ -11,7 +12,6 @@ import {
 } from 'firebase/firestore';
 import {
   db,
-  auth,
   handleFirestoreError,
   OperationType,
 } from '../lib/firebase';
@@ -35,6 +35,8 @@ import {
 } from '../data/seedData';
 import { sanitizeHtml, sanitizeUrl, generateSlug } from '../utils/statusAndSanitize';
 
+export const CLERK_APP_ID = 'app_3K0GFtslkGHTmSBGO2kYp3S8qNI';
+
 export interface ToastMessage {
   id: string;
   message: string;
@@ -42,10 +44,16 @@ export interface ToastMessage {
 }
 
 export interface AdminUser {
+  id: string;
   uid: string;
+  appId: string;
   email: string;
+  firstName?: string;
+  lastName?: string;
+  fullName?: string;
   name?: string;
-  authMode: 'clerk' | 'server-cookie';
+  imageUrl?: string;
+  authMode: 'clerk';
 }
 
 interface CMSContextValue {
@@ -67,6 +75,7 @@ interface CMSContextValue {
   showToast: (message: string, type?: 'success' | 'error' | 'info') => void;
   dismissToast: (id: string) => void;
   toggleBookmark: (postId: string) => void;
+  clearBookmarks: () => void;
   addRecentSearch: (term: string) => void;
   clearRecentSearches: () => void;
   trackEvent: (
@@ -74,12 +83,6 @@ interface CMSContextValue {
     target: string,
     category?: string
   ) => Promise<void>;
-  loginWithCredentials: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>;
-  loginWithClerk: (payload: {
-    clerkUserId: string;
-    email: string;
-    name?: string;
-  }) => Promise<{ ok: boolean; error?: string }>;
   logoutAdmin: () => Promise<void>;
   savePost: (
     postInput: Partial<Post> & { title: string; category: Post['category'] },
@@ -120,6 +123,7 @@ const STORAGE_KEYS = {
   BOOKMARKS: 'cai_saved_bookmarks_v2',
   SEARCHES: 'cai_recent_searches_v2',
   CACHE: 'cai_cms_cache_v4',
+  CLERK_TOKEN: 'cai_clerk_session_token_v1',
 };
 
 function cleanLegacyDemoPost(p: Post, fallbackId?: string): Post {
@@ -252,46 +256,60 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   });
 
-  const [adminUser, setAdminUserState] = useState<AdminUser | null>(() => {
-    try {
-      const raw = localStorage.getItem('cai_owner_user');
-      return raw ? (JSON.parse(raw) as AdminUser) : null;
-    } catch {
+  const { user: clerkUser, isLoaded: isClerkUserLoaded, isSignedIn } = useUser();
+  const { isLoaded: isClerkAuthLoaded } = useAuth();
+  const { signOut } = useClerk();
+
+  const adminUser = React.useMemo<AdminUser | null>(() => {
+    if (!isClerkUserLoaded || !isSignedIn || !clerkUser) {
       return null;
     }
-  });
+    const email =
+      clerkUser.primaryEmailAddress?.emailAddress ||
+      clerkUser.emailAddresses?.[0]?.emailAddress ||
+      '';
+    const firstName = clerkUser.firstName || email.split('@')[0] || 'Admin';
+    const lastName = clerkUser.lastName || '';
+    const fullName =
+      clerkUser.fullName ||
+      [firstName, lastName].filter(Boolean).join(' ').trim() ||
+      email ||
+      'Admin';
+
+    return {
+      id: clerkUser.id,
+      uid: clerkUser.id,
+      appId: CLERK_APP_ID,
+      email,
+      firstName,
+      lastName,
+      fullName,
+      name: fullName,
+      imageUrl: clerkUser.imageUrl,
+      authMode: 'clerk',
+    };
+  }, [isClerkUserLoaded, isSignedIn, clerkUser]);
+
   const [sessionToken, setSessionTokenState] = useState<string>(() => {
     try {
-      return localStorage.getItem('cai_owner_session_token') || '';
+      return localStorage.getItem(STORAGE_KEYS.CLERK_TOKEN) || '';
     } catch {
       return '';
     }
   });
   const [csrfToken, setCsrfToken] = useState<string>('');
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isDataLoading, setIsLoading] = useState<boolean>(true);
+  const isLoading = isDataLoading || !isClerkUserLoaded || !isClerkAuthLoaded;
   const [error, setError] = useState<string | null>(null);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
-
-  const setAdminUser = useCallback((next: AdminUser | null) => {
-    setAdminUserState(next);
-    try {
-      if (next) {
-        localStorage.setItem('cai_owner_user', JSON.stringify(next));
-      } else {
-        localStorage.removeItem('cai_owner_user');
-      }
-    } catch {
-      // ignore storage errors
-    }
-  }, []);
 
   const setSessionToken = useCallback((token: string) => {
     setSessionTokenState(token);
     try {
       if (token) {
-        localStorage.setItem('cai_owner_session_token', token);
+        localStorage.setItem(STORAGE_KEYS.CLERK_TOKEN, token);
       } else {
-        localStorage.removeItem('cai_owner_session_token');
+        localStorage.removeItem(STORAGE_KEYS.CLERK_TOKEN);
       }
     } catch {
       // ignore storage errors
@@ -319,7 +337,7 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const cached = localStorage.getItem(STORAGE_KEYS.CACHE);
       if (cached) {
         const parsed = JSON.parse(cached);
-        if (Array.isArray( parsed.posts) && parsed.posts.length > 0) {
+        if (Array.isArray(parsed.posts) && parsed.posts.length > 0) {
           setPosts(parsed.posts);
         }
         if (Array.isArray(parsed.categories) && parsed.categories.length > 0) {
@@ -369,7 +387,7 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const storedToken =
           sessionToken ||
           (typeof localStorage !== 'undefined'
-            ? localStorage.getItem('cai_owner_session_token') || ''
+            ? localStorage.getItem(STORAGE_KEYS.CLERK_TOKEN) || ''
             : '');
         await fetch('/api/cms/sync', {
           method: 'POST',
@@ -387,45 +405,42 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     [csrfToken, sessionToken]
   );
 
-  // Fetch initial state from Server API & Firestore
+  // Fetch initial state from Clerk Session API, CMS Bootstrap & Firestore
   const refreshData = useCallback(async () => {
     setError(null);
     try {
       const storedToken =
         typeof localStorage !== 'undefined'
-          ? localStorage.getItem('cai_owner_session_token') || ''
+          ? localStorage.getItem(STORAGE_KEYS.CLERK_TOKEN) || ''
           : '';
       const authHeaders: Record<string, string> = storedToken
         ? { Authorization: `Bearer ${storedToken}` }
         : {};
 
-      // 1. Check server session & bootstrap data
       const [sessionRes, bootRes] = await Promise.all([
-        fetch('/api/admin/auth/session', { headers: authHeaders }).catch(() => null),
+        fetch('/api/clerk/session', { headers: authHeaders }).catch(() => null),
         fetch('/api/cms/bootstrap', { headers: authHeaders }).catch(() => null),
       ]);
 
-      let hasServerSession = false;
+      let hasClerkSession = Boolean(adminUser);
       if (sessionRes && sessionRes.ok) {
         const sessionData = await sessionRes.json().catch(() => null);
-        if (sessionData && sessionData.authenticated && sessionData.admin) {
-          hasServerSession = true;
-          setAdminUser({
-            uid: sessionData.admin.uid || 'owner-session',
-            email: sessionData.admin.email,
-            authMode: sessionData.admin.authMode || 'server-cookie',
-          });
+        if (sessionData && sessionData.authenticated && sessionData.user) {
+          hasClerkSession = true;
           if (sessionData.csrfToken) {
             setCsrfToken(sessionData.csrfToken);
           }
         }
       }
 
+      let bootPosts: Post[] = [];
       if (bootRes && bootRes.ok) {
         const bootData = await bootRes.json().catch(() => null);
         if (bootData) {
           if (Array.isArray(bootData.posts) && bootData.posts.length > 0) {
-            setPosts(bootData.posts.map(cleanLegacyDemoPost));
+            bootPosts = bootData.posts.map(cleanLegacyDemoPost);
+            setPosts(bootPosts);
+            persistCache({ posts: bootPosts });
           }
           if (Array.isArray(bootData.categories) && bootData.categories.length > 0) {
             setCategories(bootData.categories);
@@ -436,7 +451,7 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (Array.isArray(bootData.analyticsEvents)) {
             setAnalyticsEvents(bootData.analyticsEvents);
           }
-          if (hasServerSession) {
+          if (hasClerkSession || bootData.isAdmin) {
             if (Array.isArray(bootData.media)) setMedia(bootData.media);
             if (Array.isArray(bootData.auditLogs)) setAuditLogs(bootData.auditLogs);
             if (Array.isArray(bootData.revisions)) setRevisions(bootData.revisions);
@@ -446,12 +461,10 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       }
 
-      // 2. Also query Firestore if online
+      // Query Firestore for public/CMS data if online and merge with server bootstrap
       try {
-        const isCurrentAdmin =
-          auth.currentUser?.email === 'arjunjareda2007@gmail.com' || hasServerSession;
         const postsCollection = collection(db, 'posts');
-        const postsQuery = isCurrentAdmin
+        const postsQuery = hasClerkSession
           ? postsCollection
           : query(postsCollection, where('status', '==', 'published'));
 
@@ -461,7 +474,7 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           getDoc(doc(db, 'settings', 'global')),
         ]);
 
-        if (!postsSnap.empty) {
+        if (!postsSnap.empty && bootPosts.length === 0) {
           const fsPosts = postsSnap.docs
             .map((d) => {
               const raw = d.data() as Post;
@@ -474,14 +487,6 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             );
           setPosts(fsPosts);
           persistCache({ posts: fsPosts });
-        } else if (auth.currentUser?.email === 'arjunjareda2007@gmail.com') {
-          for (const p of INITIAL_POSTS) {
-            await setDoc(doc(db, 'posts', p.id), p).catch(() => {});
-          }
-          for (const c of INITIAL_CATEGORIES) {
-            await setDoc(doc(db, 'categories', c.id), c).catch(() => {});
-          }
-          await setDoc(doc(db, 'settings', 'global'), DEFAULT_SITE_SETTINGS).catch(() => {});
         }
 
         if (!catsSnap.empty) {
@@ -500,53 +505,6 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           setSettings(fsSettings);
           persistCache({ settings: fsSettings });
         }
-
-        if (auth.currentUser?.email === 'arjunjareda2007@gmail.com') {
-          const [mediaSnap, logsSnap, revsSnap, msgsSnap] = await Promise.all([
-            getDocs(collection(db, 'media')),
-            getDocs(collection(db, 'audit_logs')),
-            getDocs(collection(db, 'revisions')),
-            getDocs(collection(db, 'contact_messages')),
-          ]);
-          if (!mediaSnap.empty) {
-            setMedia(
-              mediaSnap.docs.map((d) => {
-                const raw = d.data() as MediaLibraryItem;
-                return { ...raw, id: raw.id || d.id };
-              })
-            );
-          }
-          if (!logsSnap.empty) {
-            setAuditLogs(
-              logsSnap.docs
-                .map((d) => {
-                  const raw = d.data() as AuditLogRecord;
-                  return { ...raw, id: raw.id || d.id };
-                })
-                .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-            );
-          }
-          if (!revsSnap.empty) {
-            setRevisions(
-              revsSnap.docs
-                .map((d) => {
-                  const raw = d.data() as RevisionRecord;
-                  return { ...raw, id: raw.id || d.id };
-                })
-                .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-            );
-          }
-          if (!msgsSnap.empty) {
-            setContactMessages(
-              msgsSnap.docs
-                .map((d) => {
-                  const raw = d.data() as ContactSubmission;
-                  return { ...raw, id: raw.id || d.id };
-                })
-                .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-            );
-          }
-        }
       } catch {
         // Firestore offline or restricted; server bootstrap + local seed keeps app running smoothly
       }
@@ -556,6 +514,7 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setIsLoading(false);
     }
   }, [
+    adminUser,
     persistCache,
     setPosts,
     setCategories,
@@ -590,6 +549,16 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     },
     [showToast]
   );
+
+  const clearBookmarks = useCallback(() => {
+    setBookmarks([]);
+    try {
+      localStorage.removeItem(STORAGE_KEYS.BOOKMARKS);
+    } catch {
+      // ignore
+    }
+    showToast('Cleared all saved bookmarks', 'info');
+  }, [showToast]);
 
   const addRecentSearch = useCallback((term: string) => {
     const clean = term.trim();
@@ -656,8 +625,8 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     ) => {
       const log: AuditLogRecord = {
         id: `log-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-        adminEmail: adminUser?.email || 'arjunjareda2007@gmail.com',
-        adminUid: adminUser?.uid || 'owner-admin',
+        adminEmail: adminUser?.email || 'owner@careeralertindia.in',
+        adminUid: adminUser?.uid || 'admin-owner',
         action,
         target: entityTitle,
         details: details || entityTitle,
@@ -666,116 +635,65 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const nextLogs = [log, ...auditLogsRef.current].slice(0, 300);
       setAuditLogs(nextLogs);
       await syncToServer({ auditLogs: nextLogs });
-      if (auth.currentUser) {
-        try {
-          await setDoc(doc(db, 'audit_logs', log.id), log);
-        } catch (err) {
-          try {
-            handleFirestoreError(err, OperationType.WRITE, `audit_logs/${log.id}`);
-          } catch {
-            // logged
-          }
-        }
-      }
     },
     [adminUser, setAuditLogs, syncToServer]
   );
 
-  // Admin Authentication (Clerk + Server Session)
-  const loginWithCredentials = useCallback(
-    async (email: string, password: string): Promise<{ ok: boolean; error?: string }> => {
-      try {
-        const res = await fetch('/api/admin/auth/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, password }),
-        });
-        const data = await res.json().catch(() => ({}));
-        if (! res.ok) {
-          return { ok: false, error: data.error || 'Authentication failed.' };
-        }
-        if (data.sessionToken) {
-          setSessionToken(data.sessionToken);
-        }
-        setAdminUser({
-          uid: data.admin?.uid || 'admin-cookie',
-          email: data.admin?.email || email,
-          authMode: 'server-cookie',
-        });
-        if (data.csrfToken) {
-          setCsrfToken(data.csrfToken);
-        }
-        await refreshData();
-        showToast('Signed in to Career Alert India Owner Portal', 'success');
-        return { ok: true };
-      } catch {
-        return { ok: false, error: 'Network error while connecting to authentication server.' };
-      }
-    },
-    [refreshData, setAdminUser, setSessionToken, showToast]
-  );
+  // Sync authenticated Clerk SDK user session with backend API
+  useEffect(() => {
+    try {
+      localStorage.removeItem('cai_owner_user');
+      localStorage.removeItem('cai_owner_session_token');
+      localStorage.removeItem('cai_clerk_active_user_v1');
+      localStorage.removeItem('cai_clerk_accounts_v1');
+    } catch {
+      // ignore
+    }
+  }, []);
 
-  const loginWithClerk = useCallback(
-    async (payload: {
-      clerkUserId: string;
-      email: string;
-      name?: string;
-    }): Promise<{ ok: boolean; error?: string }> => {
-      const cleanEmail = payload.email.trim().toLowerCase();
-      if (!cleanEmail || !payload.clerkUserId) {
-        return { ok: false, error: 'Invalid Clerk user profile.' };
-      }
-      try {
-        const res = await fetch('/api/admin/auth/clerk-sync', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            clerkUserId: payload.clerkUserId,
-            email: cleanEmail,
-            name: payload.name,
-            appId: 'app_3K079yMcSqTmXUIq2teBpSaGXTu',
-          }),
-        });
-        const data = await res.json().catch(() => null);
-        if (res.ok && data) {
-          if (data.sessionToken) {
-            setSessionToken(data.sessionToken);
-          }
-          if (data.csrfToken) {
-            setCsrfToken(data.csrfToken);
-          }
-        }
-      } catch {
-        // Even on static hosting (Vercel SPA), keep Clerk session active client-side
-      }
-
-      setAdminUser({
-        uid: payload.clerkUserId,
-        email: cleanEmail,
-        name: payload.name,
-        authMode: 'clerk',
-      });
-      await refreshData();
-      showToast('Authenticated via Clerk Owner Session', 'success');
-      return { ok: true };
-    },
-    [refreshData, setAdminUser, setSessionToken, showToast]
-  );
+  useEffect(() => {
+    if (!isClerkUserLoaded) return;
+    if (isSignedIn && adminUser) {
+      fetch('/api/clerk/oauth-sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clerkUserId: adminUser.id,
+          email: adminUser.email,
+          firstName: adminUser.firstName,
+          lastName: adminUser.lastName,
+          fullName: adminUser.fullName,
+          imageUrl: adminUser.imageUrl,
+        }),
+      })
+        .then((res) => res.json().catch(() => null))
+        .then((data) => {
+          if (data?.sessionToken) setSessionToken(data.sessionToken);
+          if (data?.csrfToken) setCsrfToken(data.csrfToken);
+          refreshData();
+        })
+        .catch(() => {});
+    }
+  }, [isClerkUserLoaded, isSignedIn, adminUser, refreshData, setSessionToken]);
 
   const logoutAdmin = useCallback(async () => {
     try {
-      await fetch('/api/admin/auth/logout', {
+      await fetch('/api/clerk/signout', {
         method: 'POST',
         headers: sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {},
       });
     } catch {
       // ignore
     }
-    setAdminUser(null);
     setSessionToken('');
     setCsrfToken('');
-    showToast('Signed out of Owner Session', 'info');
-  }, [sessionToken, setAdminUser, setSessionToken, showToast]);
+    try {
+      await signOut({ redirectUrl: '/8233538355/login' });
+    } catch {
+      // ignore
+    }
+    showToast('Signed out successfully', 'info');
+  }, [sessionToken, setSessionToken, signOut, showToast]);
 
   // Post CRUD + Revision + Sanitization + Unique Slug
   const savePost = useCallback(
@@ -878,7 +796,7 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             : existing?.publishedAt || '',
         updatedAt: now,
         createdAt: existing?.createdAt || now,
-        authorUid: adminUser?.uid || existing?.authorUid || 'owner-admin',
+        authorUid: adminUser?.uid || existing?.authorUid || 'admin-owner',
       };
 
       const nextPosts =
@@ -889,13 +807,19 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setPosts(nextPosts);
       persistCache({ posts: nextPosts });
 
+      try {
+        await setDoc(doc(db, 'posts', savedPost.id), savedPost);
+      } catch {
+        // Firestore sync optional fallback
+      }
+
       // Save revision snapshot
       const newRevision: RevisionRecord = {
         id: `rev-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         postId: savedPost.id,
         postTitle: savedPost.title,
         snapshot: savedPost as unknown as Record<string, unknown>,
-        changedBy: adminUser?.email || 'arjunjareda2007@gmail.com',
+        changedBy: adminUser?.email || 'owner@careeralertindia.in',
         createdAt: now,
         changeSummary,
       };
@@ -903,19 +827,6 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setRevisions(nextRevisions);
 
       await syncToServer({ posts: nextPosts, revisions: nextRevisions });
-
-      if (auth.currentUser) {
-        try {
-          await setDoc(doc(db, 'posts', savedPost.id), savedPost);
-          await setDoc(doc(db, 'revisions', newRevision.id), newRevision);
-        } catch (err) {
-          try {
-            handleFirestoreError(err, OperationType.WRITE, `posts/${savedPost.id}`);
-          } catch {
-            // logged
-          }
-        }
-      }
 
       await appendAuditLog(
         existing ? (newStatus === 'published' ? 'publish' : 'update') : 'create',
@@ -978,9 +889,6 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setPosts(nextPosts);
         persistCache({ posts: nextPosts });
         await syncToServer({ posts: nextPosts });
-        if (auth.currentUser) {
-          await setDoc(doc(db, 'posts', postId), archived).catch(() => {});
-        }
         await appendAuditLog('archive', 'post', postId, target.title, 'Moved post to archive');
         showToast(`Archived "${target.title}"`, 'info');
         return;
@@ -989,18 +897,12 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const nextPosts = currentPosts.filter((p) => p.id !== postId);
       setPosts(nextPosts);
       persistCache({ posts: nextPosts });
-      await syncToServer({ posts: nextPosts });
-      if (auth.currentUser) {
-        try {
-          await deleteDoc(doc(db, 'posts', postId));
-        } catch (err) {
-          try {
-            handleFirestoreError(err, OperationType.DELETE, `posts/${postId}`);
-          } catch {
-            // logged
-          }
-        }
+      try {
+        await deleteDoc(doc(db, 'posts', postId));
+      } catch {
+        // ignore if Firestore restricted
       }
+      await syncToServer({ posts: nextPosts });
       await appendAuditLog('delete', 'post', postId, target.title, 'Permanently deleted post');
       showToast(`Deleted "${target.title}"`, 'info');
     },
@@ -1062,10 +964,6 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setCategories(nextCats);
       persistCache({ categories: nextCats });
       await syncToServer({ categories: nextCats });
-
-      if (auth.currentUser) {
-        await setDoc(doc(db, 'categories', savedCat.id), savedCat).catch(() => {});
-      }
 
       await appendAuditLog(
         existing ? 'update' : 'create',
@@ -1140,10 +1038,6 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       persistCache({ categories: nextCats });
       await syncToServer({ categories: nextCats, posts: nextPosts });
 
-      if (auth.currentUser) {
-        await deleteDoc(doc(db, 'categories', categoryId)).catch(() => {});
-      }
-
       await appendAuditLog('delete', 'category', categoryId, target.name, 'Deleted category');
       showToast(`Deleted category "${target.name}"`, 'info');
       return { ok: true };
@@ -1191,16 +1085,12 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         sizeBytes: item.sizeBytes,
         altText: item.altText.trim() || item.name.trim(),
         createdAt: new Date().toISOString(),
-        uploadedBy: adminUser?.email || 'arjunjareda2007@gmail.com',
+        uploadedBy: adminUser?.email || 'owner@careeralertindia.in',
       };
 
       const nextMedia = [newMedia, ...mediaRef.current];
       setMedia(nextMedia);
       await syncToServer({ media: nextMedia });
-
-      if (auth.currentUser) {
-        await setDoc(doc(db, 'media', newMedia.id), newMedia).catch(() => {});
-      }
 
       await appendAuditLog('create', 'media', newMedia.id, newMedia.name, 'Uploaded media asset');
       showToast(`Uploaded "${newMedia.name}" to Media Library`, 'success');
@@ -1234,10 +1124,6 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setMedia(nextMedia);
       await syncToServer({ media: nextMedia });
 
-      if (auth.currentUser) {
-        await deleteDoc(doc(db, 'media', mediaId)).catch(() => {});
-      }
-
       await appendAuditLog('delete', 'media', mediaId, target.name, 'Deleted media asset');
       showToast(`Deleted "${target.name}"`, 'info');
       return { ok: true };
@@ -1256,10 +1142,6 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setSettings(updated);
       persistCache({ settings: updated });
       await syncToServer({ settings: updated });
-
-      if (auth.currentUser) {
-        await setDoc(doc(db, 'settings', 'global'), updated).catch(() => {});
-      }
 
       await appendAuditLog(
         'settings_update',
@@ -1307,8 +1189,12 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         try {
           await setDoc(doc(db, 'contact_messages', msg.id), msg);
-        } catch {
-          // ignore if offline
+        } catch (err) {
+          try {
+            handleFirestoreError(err, OperationType.CREATE, `contact_messages/${msg.id}`);
+          } catch {
+            // ignore if offline
+          }
         }
 
         return { ok: true };
@@ -1326,12 +1212,6 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       );
       setContactMessages(next);
       await syncToServer({ contactMessages: next });
-      if (auth.currentUser) {
-        const target = next.find((m) => m.id === msgId);
-        if (target) {
-          await setDoc(doc(db, 'contact_messages', msgId), target).catch(() => {});
-        }
-      }
       showToast(`Marked message as ${status}`, 'info');
     },
     [setContactMessages, showToast, syncToServer]
@@ -1343,9 +1223,6 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const next = contactMessagesRef.current.filter((m) => m.id !== msgId);
       setContactMessages(next);
       await syncToServer({ contactMessages: next });
-      if (auth.currentUser) {
-        await deleteDoc(doc(db, 'contact_messages', msgId)).catch(() => {});
-      }
       if (target) {
         await appendAuditLog(
           'delete',
@@ -1369,12 +1246,6 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     persistCache({ posts: nextPosts });
     await syncToServer({ posts: nextPosts });
 
-    if (auth.currentUser) {
-      for (const dp of demoPosts) {
-        await deleteDoc(doc(db, 'posts', dp.id)).catch(() => {});
-      }
-    }
-
     await appendAuditLog(
       'delete',
       'post',
@@ -1394,12 +1265,6 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setPosts(nextPosts);
     persistCache({ posts: nextPosts });
     await syncToServer({ posts: nextPosts });
-
-    if (auth.currentUser) {
-      for (const mp of missing) {
-        await setDoc(doc(db, 'posts', mp.id), mp).catch(() => {});
-      }
-    }
 
     await appendAuditLog(
       'create',
@@ -1446,11 +1311,10 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         showToast,
         dismissToast,
         toggleBookmark,
+        clearBookmarks,
         addRecentSearch,
         clearRecentSearches,
         trackEvent,
-        loginWithCredentials,
-        loginWithClerk,
         logoutAdmin,
         savePost,
         duplicatePost,

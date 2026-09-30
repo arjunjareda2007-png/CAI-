@@ -47,6 +47,16 @@ export const HomePage: React.FC = () => {
   const handleHeroSearch = (e: React.FormEvent) => {
     e.preventDefault();
     const q = heroSearch.trim();
+    const lower = q.toLowerCase();
+    if (
+      lower === 'admin' ||
+      lower === 'owner' ||
+      lower === 'caiowner' ||
+      lower === '8233538355'
+    ) {
+      navigate('/8233538355');
+      return;
+    }
     if (q) {
       addRecentSearch(q);
       trackEvent('search', q, 'home_hero');
@@ -209,17 +219,6 @@ export const HomePage: React.FC = () => {
                   <span>Explore Latest Updates</span>
                   <ArrowRight className="w-4 h-4 shrink-0" />
                 </Link>
-
-                <a
-                  href={settings.whatsappChannelUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={() => trackEvent('whatsapp_click', 'Hero Secondary CTA')}
-                  className="btn-press inline-flex items-center gap-2 px-4 py-2 rounded-md bg-[#138A36] hover:bg-[#10752D] text-white text-xs sm:text-sm font-semibold whitespace-nowrap"
-                >
-                  <span>Join WhatsApp Channel</span>
-                  <ExternalLink className="w-4 h-4 shrink-0" />
-                </a>
 
                 <Link
                   to="/calendar"

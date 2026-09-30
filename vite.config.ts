@@ -1,12 +1,33 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
+import dotenv from 'dotenv';
+import fs from 'fs';
 import path from 'path';
 import { defineConfig } from 'vite';
 import { handleApiRequest } from './src/server/apiMiddleware';
 
 export default defineConfig(() => {
+  if (fs.existsSync('.env.local')) {
+    const localEnv = dotenv.parse(fs.readFileSync('.env.local'));
+    for (const [key, value] of Object.entries(localEnv)) {
+      if (value) {
+        process.env[key] = value;
+      }
+    }
+  }
+
   return {
-    envPrefix: ['VITE_', 'NEXT_PUBLIC_', 'CLERK_'],
+    envPrefix: ['VITE_', 'NEXT_PUBLIC_'],
+    define: process.env.VITE_CLERK_PUBLISHABLE_KEY
+      ? {
+          'import.meta.env.VITE_CLERK_PUBLISHABLE_KEY': JSON.stringify(
+            process.env.VITE_CLERK_PUBLISHABLE_KEY
+          ),
+          'import.meta.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY': JSON.stringify(
+            process.env.VITE_CLERK_PUBLISHABLE_KEY
+          ),
+        }
+      : undefined,
     plugins: [
       react(),
       tailwindcss(),

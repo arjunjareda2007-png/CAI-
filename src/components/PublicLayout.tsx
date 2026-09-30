@@ -14,6 +14,7 @@ import {
   CheckCircle2,
   AlertCircle,
   Info,
+  ArrowUp,
 } from 'lucide-react';
 import { useCMS } from '../context/CMSContext';
 import { computePostStatus } from '../utils/statusAndSanitize';
@@ -39,6 +40,7 @@ export const PublicLayout: React.FC<{ children: React.ReactNode }> = ({ children
   const [searchQuery, setSearchQuery] = useState('');
   const [searchCategory, setSearchCategory] = useState<string>('all');
   const [tickerPaused, setTickerPaused] = useState(false);
+  const [showBackToTop, setShowBackToTop] = useState(false);
 
   const moreDropdownRef = useRef<HTMLDivElement>(null);
 
@@ -55,6 +57,14 @@ export const PublicLayout: React.FC<{ children: React.ReactNode }> = ({ children
     setSearchModalOpen(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [location.pathname]);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setShowBackToTop(window.scrollY > 420);
+    };
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   // Close "More" dropdown when clicking outside
   useEffect(() => {
@@ -330,7 +340,7 @@ export const PublicLayout: React.FC<{ children: React.ReactNode }> = ({ children
             </div>
           </nav>
 
-          {/* Zone 3: Primary Actions (Search + WhatsApp CTA) */}
+          {/* Zone 3: Primary Actions (Search) */}
           <div className="flex items-center gap-2 shrink-0">
             <button
               type="button"
@@ -344,17 +354,6 @@ export const PublicLayout: React.FC<{ children: React.ReactNode }> = ({ children
                 ⌘K
               </kbd>
             </button>
-
-            <a
-              href={settings.whatsappChannelUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={() => trackEvent('whatsapp_click', 'Header WhatsApp CTA')}
-              className="btn-press hidden sm:inline-flex items-center justify-center gap-1.5 h-9 px-3.5 rounded-md bg-[#138A36] hover:bg-[#10752D] text-xs font-semibold text-white leading-none whitespace-nowrap"
-            >
-              <span className="leading-none">WhatsApp Channel</span>
-              <ExternalLink className="w-3.5 h-3.5 shrink-0" />
-            </a>
           </div>
         </div>
       </header>
@@ -508,16 +507,6 @@ export const PublicLayout: React.FC<{ children: React.ReactNode }> = ({ children
                     Saved Bookmarks ({bookmarks.length})
                   </Link>
                 </li>
-                <li>
-                  <a
-                    href="/sitemap.xml"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="hover:text-white transition-colors"
-                  >
-                    XML Sitemap
-                  </a>
-                </li>
               </ul>
             </div>
 
@@ -575,16 +564,16 @@ export const PublicLayout: React.FC<{ children: React.ReactNode }> = ({ children
             </p>
           </div>
 
-          {/* Subtle Made in India Signature Line */}
-          <div className="mt-5 pt-4 border-t border-white/10 flex flex-col items-center justify-center gap-1.5 text-center">
-            <div className="inline-flex items-center gap-2 text-[11px] font-medium tracking-wider text-white/60">
-              <span className="inline-flex items-center overflow-hidden rounded-[1px] border border-white/20 shrink-0" aria-hidden="true">
-                <span className="w-2 h-2.5 bg-[#FF7A00]" />
-                <span className="w-2 h-2.5 bg-white" />
-                <span className="w-2 h-2.5 bg-[#138A36]" />
-              </span>
-              <span>Made in India · Dedicated to Indian Aspirants</span>
-            </div>
+          <div className="mt-4 pt-4 border-t border-white/10 flex items-center justify-center gap-2 text-xs text-white/75 font-medium">
+            <span
+              className="inline-flex items-center overflow-hidden rounded-[2px] border border-white/25 shrink-0"
+              aria-hidden="true"
+            >
+              <span className="w-2 h-2.5 bg-[#FF7A00]" />
+              <span className="w-2 h-2.5 bg-white" />
+              <span className="w-2 h-2.5 bg-[#138A36]" />
+            </span>
+            <span>Made in India</span>
           </div>
         </div>
       </footer>
@@ -938,6 +927,19 @@ export const PublicLayout: React.FC<{ children: React.ReactNode }> = ({ children
             </div>
           </div>
         </div>
+      )}
+
+      {/* Back to Top Floating Action Button */}
+      {showBackToTop && (
+        <button
+          type="button"
+          onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+          aria-label="Scroll back to top"
+          title="Back to top"
+          className="btn-press fixed bottom-20 lg:bottom-6 right-4 z-40 inline-flex items-center justify-center w-10 h-10 rounded-full bg-[#071A3D] hover:bg-[#0D2758] text-white border border-white/20 shadow-lg cursor-pointer"
+        >
+          <ArrowUp className="w-4 h-4 text-[#FF7A00]" />
+        </button>
       )}
 
       {/* Global Toast Notifications */}

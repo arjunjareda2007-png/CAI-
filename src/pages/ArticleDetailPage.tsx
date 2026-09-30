@@ -11,6 +11,8 @@ import {
   CheckCircle2,
   ArrowRight,
   FileText,
+  Printer,
+  CalendarPlus,
 } from 'lucide-react';
 import { useCMS } from '../context/CMSContext';
 import { SEOHead } from '../components/SEOHead';
@@ -250,6 +252,72 @@ export const ArticleDetailPage: React.FC = () => {
     }
   };
 
+  const handleDownloadCalendarIcs = () => {
+    const rawDate = post.applicationEnd || post.examDate || post.publishedAt;
+    const parsed = rawDate ? new Date(rawDate) : new Date();
+    const validDate = Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+    const y = validDate.getUTCFullYear();
+    const m = String(validDate.getUTCMonth() + 1).padStart(2, '0');
+    const d = String(validDate.getUTCDate()).padStart(2, '0');
+    const dtStr = `${y}${m}${d}`;
+    const nextDate = new Date(validDate.getTime() + 86400000);
+    const ny = nextDate.getUTCFullYear();
+    const nm = String(nextDate.getUTCMonth() + 1).padStart(2, '0');
+    const nd = String(nextDate.getUTCDate()).padStart(2, '0');
+    const dtEndStr = `${ny}${nm}${nd}`;
+    const nowStamp = new Date().toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+
+    const ics = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'PRODID:-//Career Alert India//Exam & Job Reminder//EN',
+      'BEGIN:VEVENT',
+      `UID:cai-${post.id}@cai.foldedpage.in`,
+      `DTSTAMP:${nowStamp}`,
+      `DTSTART;VALUE=DATE:${dtStr}`,
+      `DTEND;VALUE=DATE:${dtEndStr}`,
+      `SUMMARY:${post.title.replace(/[,;]/g, ' ')} (${post.organization})`,
+      `DESCRIPTION:${(post.summary || '').replace(/\r?\n/g, ' ')} - Direct Link: ${shareUrl}`,
+      `URL:${shareUrl}`,
+      'END:VEVENT',
+      'END:VCALENDAR',
+    ].join('\r\n');
+
+    const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `CAI-Reminder-${post.slug}.ics`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('Added deadline reminder (.ics) to downloads', 'success');
+  };
+
+  const quickJumpSections = [
+    post.importantDates && post.importantDates.length > 0
+      ? { id: 'section-dates', label: 'Important Dates' }
+      : null,
+    post.fees && post.fees.length > 0
+      ? { id: 'section-fees', label: 'Application Fee' }
+      : null,
+    post.eligibility &&
+    (post.eligibility.education || post.eligibility.ageMin || post.eligibility.ageMax)
+      ? { id: 'section-eligibility', label: 'Eligibility' }
+      : null,
+    post.vacancies && post.vacancies.length > 0
+      ? { id: 'section-vacancies', label: 'Vacancy Details' }
+      : null,
+    post.syllabusSections && post.syllabusSections.length > 0
+      ? { id: 'section-syllabus', label: 'Syllabus & Pattern' }
+      : null,
+    post.importantLinks && post.importantLinks.length > 0
+      ? { id: 'section-links', label: 'Official Links' }
+      : null,
+    post.faqs && post.faqs.length > 0
+      ? { id: 'section-faqs', label: 'FAQs' }
+      : null,
+  ].filter(Boolean) as Array<{ id: string; label: string }>;
+
   return (
     <>
       <SEOHead
@@ -395,6 +463,27 @@ export const ArticleDetailPage: React.FC = () => {
                   </>
                 )}
               </button>
+
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="btn-press inline-flex items-center gap-1.5 px-3 py-1.5 rounded border border-[#E2E8F0] hover:border-[#071A3D] text-[#071A3D] text-xs font-semibold transition-colors cursor-pointer"
+              >
+                <Printer className="w-3.5 h-3.5 text-[#64748B]" />
+                <span className="hidden sm:inline">Print / PDF</span>
+              </button>
+
+              {(post.applicationEnd || post.examDate) && (
+                <button
+                  type="button"
+                  onClick={handleDownloadCalendarIcs}
+                  title="Add deadline or exam date to Calendar"
+                  className="btn-press inline-flex items-center gap-1.5 px-3 py-1.5 rounded border border-[#E2E8F0] hover:border-[#071A3D] text-[#071A3D] text-xs font-semibold transition-colors cursor-pointer"
+                >
+                  <CalendarPlus className="w-3.5 h-3.5 text-[#FF7A00]" />
+                  <span className="hidden sm:inline">Set Reminder</span>
+                </button>
+              )}
             </div>
 
             <button
@@ -410,6 +499,21 @@ export const ArticleDetailPage: React.FC = () => {
               <span>{isSaved ? 'Saved in Bookmarks' : 'Save Update'}</span>
             </button>
           </div>
+
+          {quickJumpSections.length > 1 && (
+            <div className="mt-4 pt-3 border-t border-[#E2E8F0] flex items-center gap-2 overflow-x-auto text-xs">
+              <span className="font-semibold text-[#64748B] shrink-0">Jump to:</span>
+              {quickJumpSections.map((sec) => (
+                <a
+                  key={sec.id}
+                  href={`#${sec.id}`}
+                  className="px-2.5 py-1 rounded bg-[#F6F8FB] hover:bg-[#071A3D] text-[#071A3D] hover:text-white font-medium whitespace-nowrap transition-colors"
+                >
+                  {sec.label}
+                </a>
+              ))}
+            </div>
+          )}
         </header>
 
         {/* Main Structured Article Sections */}
@@ -456,7 +560,7 @@ export const ArticleDetailPage: React.FC = () => {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Important Dates Table */}
               {post.importantDates && post.importantDates.length > 0 && (
-                <section className="bg-white border border-[#E2E8F0] rounded-xl overflow-hidden">
+                <section id="section-dates" className="bg-white border border-[#E2E8F0] rounded-xl overflow-hidden scroll-mt-20">
                   <div className="px-5 py-3.5 bg-[#071A3D] text-white">
                     <h2 className="text-base font-bold">Important Dates</h2>
                   </div>
@@ -491,7 +595,7 @@ export const ArticleDetailPage: React.FC = () => {
 
               {/* Application Fee Table */}
               {post.fees && post.fees.length > 0 && (
-                <section className="bg-white border border-[#E2E8F0] rounded-xl overflow-hidden">
+                <section id="section-fees" className="bg-white border border-[#E2E8F0] rounded-xl overflow-hidden scroll-mt-20">
                   <div className="px-5 py-3.5 bg-[#071A3D] text-white">
                     <h2 className="text-base font-bold">Application Fee</h2>
                   </div>
@@ -528,7 +632,7 @@ export const ArticleDetailPage: React.FC = () => {
             (post.eligibility.education ||
               post.eligibility.ageMin ||
               post.eligibility.ageMax) && (
-              <section className="bg-white border border-[#E2E8F0] rounded-xl overflow-hidden">
+              <section id="section-eligibility" className="bg-white border border-[#E2E8F0] rounded-xl overflow-hidden scroll-mt-20">
                 <div className="px-5 py-3.5 bg-[#071A3D] text-white">
                   <h2 className="text-base font-bold">Eligibility Criteria & Age Limit</h2>
                 </div>
@@ -586,7 +690,7 @@ export const ArticleDetailPage: React.FC = () => {
 
           {/* Vacancy Details Responsive Table */}
           {post.vacancies && post.vacancies.length > 0 && (
-            <section className="bg-white border border-[#E2E8F0] rounded-xl overflow-hidden">
+            <section id="section-vacancies" className="bg-white border border-[#E2E8F0] rounded-xl overflow-hidden scroll-mt-20">
               <div className="px-5 py-3.5 bg-[#071A3D] text-white flex items-center justify-between">
                 <h2 className="text-base font-bold">Post-Wise Vacancy Details</h2>
                 {typeof post.totalVacancies === 'number' && post.totalVacancies > 0 && (
@@ -628,7 +732,7 @@ export const ArticleDetailPage: React.FC = () => {
 
           {/* Subject-Wise Syllabus Table (for Syllabus posts or Exam posts) */}
           {post.syllabusSections && post.syllabusSections.length > 0 && (
-            <section className="bg-white border border-[#E2E8F0] rounded-xl overflow-hidden">
+            <section id="section-syllabus" className="bg-white border border-[#E2E8F0] rounded-xl overflow-hidden scroll-mt-20">
               <div className="px-5 py-3.5 bg-[#071A3D] text-white">
                 <h2 className="text-base font-bold">Subject-Wise Syllabus & Exam Pattern</h2>
               </div>
@@ -707,7 +811,7 @@ export const ArticleDetailPage: React.FC = () => {
 
           {/* Section 22: Important Official Links (Only shown when links exist) */}
           {post.importantLinks && post.importantLinks.length > 0 && (
-            <section className="bg-white border-2 border-[#071A3D] rounded-xl overflow-hidden">
+            <section id="section-links" className="bg-white border-2 border-[#071A3D] rounded-xl overflow-hidden scroll-mt-20">
               <div className="px-5 py-3.5 bg-[#071A3D] text-white flex items-center justify-between">
                 <h2 className="text-base font-bold">Important Official Links</h2>
                 <span className="text-xs text-white/80">Direct Verified Portals</span>
@@ -775,7 +879,7 @@ export const ArticleDetailPage: React.FC = () => {
 
           {/* Section 73: Frequently Asked Questions (FAQ) */}
           {post.faqs && post.faqs.length > 0 && (
-            <section className="bg-white border border-[#E2E8F0] rounded-xl p-5 sm:p-6">
+            <section id="section-faqs" className="bg-white border border-[#E2E8F0] rounded-xl p-5 sm:p-6 scroll-mt-20">
               <h2 className="text-base sm:text-lg font-bold text-[#071A3D] mb-4">
                 Frequently Asked Questions (FAQs)
               </h2>

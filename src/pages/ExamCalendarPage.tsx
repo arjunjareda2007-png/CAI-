@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { Calendar, List, ArrowRight, Share2, Edit3 } from 'lucide-react';
+import { Calendar, List, ArrowRight, Share2, Edit3, Search, Download, X } from 'lucide-react';
 import { useCMS } from '../context/CMSContext';
 import { SEOHead } from '../components/SEOHead';
 import { ShareModal } from '../components/ShareModal';
@@ -8,9 +8,10 @@ import { Post } from '../types/cms';
 import { computePostStatus, formatIndianDate } from '../utils/statusAndSanitize';
 
 export const ExamCalendarPage: React.FC = () => {
-  const { publishedPosts, categories, settings, adminUser } = useCMS();
+  const { publishedPosts, categories, settings, adminUser, showToast } = useCMS();
   const [viewMode, setViewMode] = useState<'list' | 'monthly'>('list');
   const [selectedOrg, setSelectedOrg] = useState<string>('All');
+  const [searchQuery, setSearchQuery] = useState<string>('');
   const [sharePost, setSharePost] = useState<Post | null>(null);
 
   const domainOrgs = useMemo(
@@ -22,13 +23,56 @@ export const ExamCalendarPage: React.FC = () => {
   );
 
   const calendarEntries = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
     return publishedPosts.filter((p) => {
       if (selectedOrg !== 'All' && p.organization.toLowerCase() !== selectedOrg.toLowerCase()) {
         return false;
       }
+      if (
+        q &&
+        !p.title.toLowerCase().includes(q) &&
+        !p.organization.toLowerCase().includes(q) &&
+        !p.state.toLowerCase().includes(q)
+      ) {
+        return false;
+      }
       return Boolean(p.examDate || p.applicationEnd || p.admitCardDate || p.resultDate);
     });
-  }, [publishedPosts, selectedOrg]);
+  }, [publishedPosts, selectedOrg, searchQuery]);
+
+  const handleExportCalendarCsv = () => {
+    const headers = [
+      'Exam / Recruitment',
+      'Organization',
+      'Application Start',
+      'Application End',
+      'Exam Date',
+      'Admit Card Date',
+      'Result Date',
+    ];
+    const rows = calendarEntries.map((p) =>
+      [
+        p.title,
+        p.organization,
+        p.applicationStart || '',
+        p.applicationEnd || '',
+        p.examDate || 'To Be Notified',
+        p.admitCardDate || '',
+        p.resultDate || '',
+      ]
+        .map((val) => `"${String(val).replace(/"/g, '""')}"`)
+        .join(',')
+    );
+    const csv = [headers.join(','), ...rows].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'Career-Alert-India-Exam-Calendar-2026-27.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('Downloaded Exam Calendar CSV schedule', 'success');
+  };
 
   const groupedByMonth = useMemo(() => {
     const groups: Record<string, typeof calendarEntries> = {
@@ -37,10 +81,15 @@ export const ExamCalendarPage: React.FC = () => {
       'January – March 2027 & Upcoming': [],
     };
     calendarEntries.forEach((p) => {
-      const ex = (p.examDate || '').toLowerCase();
-      if (ex.includes('sep') || ex.includes('oct')) {
+      const ex = (p.examDate || p.applicationEnd || '').toLowerCase();
+      if (ex.includes('sep') || ex.includes('oct') || ex.includes('-09-') || ex.includes('-10-')) {
         groups['September – October 2026'].push(p);
-      } else if (ex.includes('nov') || ex.includes('dec')) {
+      } else if (
+        ex.includes('nov') ||
+        ex.includes('dec') ||
+        ex.includes('-11-') ||
+        ex.includes('-12-')
+      ) {
         groups['November – December 2026'].push(p);
       } else {
         groups['January – March 2027 & Upcoming'].push(p);
@@ -89,6 +138,27 @@ export const ExamCalendarPage: React.FC = () => {
                 </Link>
               )}
 
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 text-[#64748B] absolute left-2.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search exam schedule..."
+                  aria-label="Search exam schedule"
+                  className="pl-8 pr-6 py-1.5 rounded-md border border-[#E2E8F0] bg-[#F6F8FB] text-xs text-[#071A3D] placeholder:text-[#64748B] focus:outline-none focus:border-[#071A3D] focus:bg-white"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-[#64748B] hover:text-[#071A3D] cursor-pointer"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+
               <select
                 value={selectedOrg}
                 onChange={(e) => setSelectedOrg(e.target.value)}
@@ -102,6 +172,16 @@ export const ExamCalendarPage: React.FC = () => {
                   </option>
                 ))}
               </select>
+
+              <button
+                type="button"
+                onClick={handleExportCalendarCsv}
+                title="Download Exam Calendar CSV"
+                className="btn-press inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-[#E2E8F0] hover:border-[#071A3D] bg-white text-xs font-semibold text-[#071A3D] cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5 text-[#FF7A00]" />
+                <span className="hidden sm:inline">CSV</span>
+              </button>
 
               <div className="inline-flex rounded-md border border-[#E2E8F0] bg-[#F6F8FB] p-0.5">
                 <button

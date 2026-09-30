@@ -11,52 +11,40 @@ import {
   INITIAL_REVISIONS,
 } from '../data/seedData';
 
-const AUTH_SECRET =
-  process.env.AUTH_SECRET || 'cai-hmac-secret-9f8e7d6c5b4a39281726354455667788';
-const CONFIGURED_ADMIN_EMAIL = (
-  process.env.ADMIN_EMAIL || 'arjunjareda2007@gmail.com'
-).toLowerCase();
+export const CLERK_APP_ID = process.env.CLERK_APP_ID || 'app_3K0GFtslkGHTmSBGO2kYp3S8qNI';
 
-// Pre-compute scrypt hash for fallback environment password if ADMIN_PASSWORD_HASH is not injected
-const DEFAULT_SALT = 'cai_prod_salt_2026';
-const DEFAULT_DERIVED_HASH = crypto
-  .scryptSync(process.env.ADMIN_INITIAL_PASS || 'CareerAlert@2026', DEFAULT_SALT, 64)
-  .toString('hex');
+const CLERK_SESSION_SECRET =
+  process.env.CLERK_SECRET_KEY ||
+  `clerk-hmac-${CLERK_APP_ID}-9f8e7d6c5b4a3928172635`;
 
-const ADMIN_PASSWORD_HASH =
-  process.env.ADMIN_PASSWORD_HASH || `${DEFAULT_SALT}:${DEFAULT_DERIVED_HASH}`;
-
-function verifyPasswordHash(passwordInput: string, storedHash: string): boolean {
-  try {
-    const [salt, keyHex] = storedHash.split(':');
-    if (!salt || !keyHex) return false;
-    const derivedKey = crypto.scryptSync(passwordInput, salt, 64);
-    const keyBuf = Buffer.from(keyHex, 'hex');
-    if (derivedKey.length !== keyBuf.length) return false;
-    return crypto.timingSafeEqual(derivedKey, keyBuf);
-  } catch {
-    return false;
-  }
-}
-
-interface SessionPayload {
-  uid: string;
+export interface ClerkSessionPayload {
+  sub: string;
+  appId: string;
   email: string;
+  firstName: string;
+  lastName: string;
+  fullName: string;
+  imageUrl?: string;
   csrfToken: string;
   exp: number;
 }
 
-function signSessionToken(payload: SessionPayload): string {
+function signClerkSessionToken(payload: ClerkSessionPayload): string {
   const dataB64 = Buffer.from(JSON.stringify(payload), 'utf-8').toString('base64url');
-  const sig = crypto.createHmac('sha256', AUTH_SECRET).update(dataB64).digest('base64url');
-  return `${dataB64}.${sig}`;
+  const sig = crypto
+    .createHmac('sha256', CLERK_SESSION_SECRET)
+    .update(dataB64)
+    .digest('base64url');
+  return `clk_sess_${dataB64}.${sig}`;
 }
 
-function verifySessionToken(token?: string): SessionPayload | null {
-  if (!token || !token.includes('.')) return null;
-  const [dataB64, sig] = token.split('.');
+function verifyClerkSessionToken(rawToken?: string): ClerkSessionPayload | null {
+  if (!rawToken) return null;
+  const cleaned = rawToken.startsWith('clk_sess_') ? rawToken.slice(9) : rawToken;
+  if (!cleaned.includes('.')) return null;
+  const [dataB64, sig] = cleaned.split('.');
   const expectedSig = crypto
-    .createHmac('sha256', AUTH_SECRET)
+    .createHmac('sha256', CLERK_SESSION_SECRET)
     .update(dataB64)
     .digest('base64url');
   const sigBuf = Buffer.from(sig);
@@ -65,7 +53,9 @@ function verifySessionToken(token?: string): SessionPayload | null {
     return null;
   }
   try {
-    const payload = JSON.parse(Buffer.from(dataB64, 'base64url').toString('utf-8')) as SessionPayload;
+    const payload = JSON.parse(
+      Buffer.from(dataB64, 'base64url').toString('utf-8')
+    ) as ClerkSessionPayload;
     if (Date.now() > payload.exp) return null;
     return payload;
   } catch {
@@ -87,8 +77,6 @@ function parseCookies(cookieHeader?: string): Record<string, string> {
   return out;
 }
 
-// Rate limit stores
-const loginRateLimit = new Map<string, { count: number; resetAt: number }>();
 const contactRateLimit = new Map<string, { count: number; resetAt: number }>();
 
 function checkRateLimit(
@@ -151,7 +139,10 @@ function loadServerStore(): ServerCMSStore {
         parsed.posts = parsed.posts.map((p, idx) => ({
           ...p,
           id: p.id || p.slug || `post-${idx}`,
-          title: (p.title || '').replace(/\s*\(Demo Sample\)/gi, '').replace(/\s*\(Demo\)/gi, '').trim(),
+          title: (p.title || '')
+            .replace(/\s*\(Demo Sample\)/gi, '')
+            .replace(/\s*\(Demo\)/gi, '')
+            .trim(),
           summary: (p.summary || '').replace(/^\[DEMO DATA\]\s*/i, '').trim(),
           content: (p.content || '').replace(/<div class="notice-info">.*?<\/div>\s*/gis, ''),
           isDemo: false,
@@ -182,12 +173,63 @@ function loadServerStore(): ServerCMSStore {
   return initial;
 }
 
+function generateSitemapXml(store: ServerCMSStore, rawBaseUrl?: string): string {
+  const baseUrl = (rawBaseUrl || process.env.APP_URL || 'https://cai.foldedpage.in').replace(/\/$/, '');
+  const staticRoutes = [
+    '',
+    '/latest',
+    '/jobs',
+    '/exams',
+    '/results',
+    '/admit-card',
+    '/answer-key',
+    '/syllabus',
+    '/notifications',
+    '/calendar',
+    '/about',
+    '/contact',
+    '/privacy-policy',
+    '/terms',
+    '/disclaimer',
+  ];
+  const nowIso = new Date().toISOString();
+  const publishedPosts = (store.posts || []).filter((p) => p.status === 'published');
+  const urlsXml = [
+    ...staticRoutes.map(
+      (route) => `  <url>
+    <loc>${baseUrl}${route}</loc>
+    <lastmod>${nowIso}</lastmod>
+    <changefreq>${route === '' ? 'hourly' : 'daily'}</changefreq>
+    <priority>${route === '' ? '1.0' : '0.8'}</priority>
+  </url>`
+    ),
+    ...publishedPosts.map(
+      (post) => `  <url>
+    <loc>${baseUrl}/${post.category}/${post.slug}</loc>
+    <lastmod>${new Date(post.updatedAt || Date.now()).toISOString()}</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>`
+    ),
+  ].join('\n');
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${urlsXml}
+</urlset>`;
+}
+
 function saveServerStore(store: ServerCMSStore): void {
   try {
     if (!fs.existsSync(DATA_DIR)) {
       fs.mkdirSync(DATA_DIR, { recursive: true });
     }
     fs.writeFileSync(STORE_FILE, JSON.stringify(store, null, 2), 'utf-8');
+    // Keep background public/sitemap.xml synchronized automatically for search engines
+    const publicSitemapPath = path.resolve(process.cwd(), 'public', 'sitemap.xml');
+    if (fs.existsSync(path.dirname(publicSitemapPath))) {
+      fs.writeFileSync(publicSitemapPath, generateSitemapXml(store), 'utf-8');
+    }
   } catch (e) {
     console.error('Failed to persist server store:', e);
   }
@@ -214,7 +256,12 @@ function readJsonBody(req: IncomingMessage): Promise<Record<string, any>> {
   });
 }
 
-function sendJson(res: ServerResponse, status: number, data: unknown, extraHeaders?: Record<string, string | string[]>) {
+function sendJson(
+  res: ServerResponse,
+  status: number,
+  data: unknown,
+  extraHeaders?: Record<string, string | string[]>
+) {
   res.writeHead(status, {
     'Content-Type': 'application/json; charset=utf-8',
     'X-Content-Type-Options': 'nosniff',
@@ -223,6 +270,29 @@ function sendJson(res: ServerResponse, status: number, data: unknown, extraHeade
     ...extraHeaders,
   });
   res.end(JSON.stringify(data));
+}
+
+function formatPublicClerkUser(user: {
+  id: string;
+  appId: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  fullName: string;
+  imageUrl?: string;
+}) {
+  return {
+    id: user.id,
+    uid: user.id,
+    appId: user.appId || CLERK_APP_ID,
+    email: user.email,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    fullName: user.fullName,
+    name: user.fullName,
+    imageUrl: user.imageUrl || '',
+    authMode: 'clerk' as const,
+  };
 }
 
 export async function handleApiRequest(
@@ -265,51 +335,15 @@ export async function handleApiRequest(
     return true;
   }
 
-  // 2. Dynamic sitemap.xml
+  // 2. Dynamic background sitemap.xml for search engine crawlers
   if (pathname === '/sitemap.xml' && method === 'GET') {
     const store = loadServerStore();
-    const baseUrl = (process.env.APP_URL || 'https://cai.foldedpage.in').replace(/\/$/, '');
-    const staticRoutes = [
-      '',
-      '/latest',
-      '/jobs',
-      '/exams',
-      '/results',
-      '/admit-card',
-      '/answer-key',
-      '/syllabus',
-      '/notifications',
-      '/calendar',
-      '/about',
-      '/contact',
-      '/privacy-policy',
-      '/terms',
-      '/disclaimer',
-    ];
-    const publishedPosts = store.posts.filter((p) => p.status === 'published');
-    const urlsXml = [
-      ...staticRoutes.map(
-        (route) => `  <url>
-    <loc>${baseUrl}${route}</loc>
-    <changefreq>${route === '' ? 'hourly' : 'daily'}</changefreq>
-    <priority>${route === '' ? '1.0' : '0.8'}</priority>
-  </url>`
-      ),
-      ...publishedPosts.map(
-        (post) => `  <url>
-    <loc>${baseUrl}/${post.category}/${post.slug}</loc>
-    <lastmod>${new Date(post.updatedAt || Date.now()).toISOString()}</lastmod>
-    <changefreq>daily</changefreq>
-    <priority>0.9</priority>
-  </url>`
-      ),
-    ].join('\n');
-
-    const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${urlsXml}
-</urlset>`;
-    res.writeHead(200, { 'Content-Type': 'application/xml; charset=utf-8' });
+    const sitemap = generateSitemapXml(store, process.env.APP_URL || 'https://cai.foldedpage.in');
+    res.writeHead(200, {
+      'Content-Type': 'application/xml; charset=utf-8',
+      'Cache-Control': 'public, max-age=1800',
+      'X-Robots-Tag': 'noindex, follow',
+    });
     res.end(sitemap);
     return true;
   }
@@ -327,9 +361,9 @@ ${urlsXml}
   const authHeader = req.headers['authorization'] || '';
   const bearerToken = authHeader.startsWith('Bearer ')
     ? authHeader.slice(7).trim()
-    : (req.headers['x-admin-session'] as string) || '';
-  const sessionTokenCandidate = bearerToken || cookies['cai_admin_session'];
-  const currentSession = verifySessionToken(sessionTokenCandidate);
+    : (req.headers['x-clerk-session'] as string) || '';
+  const tokenCandidate = bearerToken || cookies['__clerk_cai_session'];
+  const currentSession = verifyClerkSessionToken(tokenCandidate);
 
   const serverClerkPublishableKey =
     process.env.VITE_CLERK_PUBLISHABLE_KEY ||
@@ -337,135 +371,81 @@ ${urlsXml}
     process.env.CLERK_PUBLISHABLE_KEY ||
     '';
 
-  // Auth Session Check
-  if (pathname === '/api/admin/auth/session' && method === 'GET') {
+  // ============================================================================
+  // CLERK AUTHENTICATION SYSTEM ENDPOINTS (/api/clerk/*)
+  // Linked to Clerk Application: app_3K079yMcSqTmXUIq2teBpSaGXTu
+  // ============================================================================
+
+  // 1. GET /api/clerk/session — Inspect active Clerk session & config
+  if (pathname === '/api/clerk/session' && method === 'GET') {
     if (!currentSession) {
       sendJson(res, 200, {
         authenticated: false,
-        clerkAppId: process.env.CLERK_APP_ID || 'app_3K079yMcSqTmXUIq2teBpSaGXTu',
+        clerkAppId: CLERK_APP_ID,
         clerkPublishableKey: serverClerkPublishableKey,
       });
       return true;
     }
+
     sendJson(res, 200, {
       authenticated: true,
-      admin: {
-        uid: currentSession.uid,
+      user: formatPublicClerkUser({
+        id: currentSession.sub,
+        appId: currentSession.appId,
         email: currentSession.email,
-      },
+        firstName: currentSession.firstName,
+        lastName: currentSession.lastName,
+        fullName: currentSession.fullName,
+        imageUrl: currentSession.imageUrl,
+      }),
       csrfToken: currentSession.csrfToken,
-      clerkAppId: process.env.CLERK_APP_ID || 'app_3K079yMcSqTmXUIq2teBpSaGXTu',
+      clerkAppId: CLERK_APP_ID,
       clerkPublishableKey: serverClerkPublishableKey,
     });
     return true;
   }
 
-  // Admin Login (Server-Side Hash Verification + Rate Limiting + HTTP-Only Cookie)
-  if (pathname === '/api/admin/auth/login' && method === 'POST') {
-    const rate = checkRateLimit(loginRateLimit, clientIp, 6, 15 * 60 * 1000);
-    if (!rate.allowed) {
-      sendJson(res, 429, {
-        error: `Too many login attempts. Please wait ${rate.retryAfterSec} seconds before retrying.`,
-      });
-      return true;
-    }
-
+  // 2. POST /api/clerk/oauth-sync — Bridge live @clerk/react SDK user with server session
+  if (pathname === '/api/clerk/oauth-sync' && method === 'POST') {
     try {
       const body = await readJsonBody(req);
+      const clerkUserId = String(body.clerkUserId || '').trim();
       const email = String(body.email || '').trim().toLowerCase();
-      const password = String(body.password || '');
+      const firstName = String(body.firstName || '').trim() || email.split('@')[0] || 'Owner';
+      const lastName = String(body.lastName || '').trim();
+      const fullName =
+        String(body.fullName || '').trim() ||
+        [firstName, lastName].filter(Boolean).join(' ').trim() ||
+        firstName;
+      const imageUrl = String(body.imageUrl || '').trim();
 
-      const isAllowedEmail = email === CONFIGURED_ADMIN_EMAIL;
-      const isPasswordValid = verifyPasswordHash(password, ADMIN_PASSWORD_HASH);
-
-      if (!isAllowedEmail || !isPasswordValid) {
-        sendJson(res, 401, {
-          error: 'Invalid administrator email or password.',
-        });
-        return true;
-      }
-
-      // Reset rate limit on success
-      loginRateLimit.delete(clientIp);
-
-      const csrfToken = crypto.randomBytes(24).toString('hex');
-      const sessionPayload: SessionPayload = {
-        uid: 'admin-server-uid',
-        email,
-        csrfToken,
-        exp: Date.now() + 8 * 60 * 60 * 1000, // 8 hours
-      };
-      const signedCookie = signSessionToken(sessionPayload);
-
-      const store = loadServerStore();
-      store.auditLogs.unshift({
-        id: `log-${Date.now()}`,
-        adminEmail: email,
-        adminUid: sessionPayload.uid,
-        action: 'Admin Login',
-        target: 'Admin Session (HTTP-Only Cookie)',
-        details: 'Verified via server-side scrypt password hash.',
-        createdAt: new Date().toISOString(),
-      });
-      saveServerStore(store);
-
-      sendJson(
-        res,
-        200,
-        {
-          authenticated: true,
-          admin: { uid: sessionPayload.uid, email },
-          csrfToken,
-          sessionToken: signedCookie,
-        },
-        {
-          'Set-Cookie': [
-            `cai_admin_session=${encodeURIComponent(signedCookie)}; HttpOnly; Path=/; Max-Age=28800; SameSite=Lax`,
-          ],
-        }
-      );
-      return true;
-    } catch (e: any) {
-      sendJson(res, 400, { error: e.message || 'Invalid login request' });
-      return true;
-    }
-  }
-
-  // Clerk Owner Authentication Session Bridge (Linked to Clerk App: app_3K079yMcSqTmXUIq2teBpSaGXTu)
-  if (
-    (pathname === '/api/admin/auth/clerk-sync' || pathname === '/api/admin/auth/firebase-sync') &&
-    method === 'POST'
-  ) {
-    try {
-      const body = await readJsonBody(req);
-      const email = String(body.email || '').trim().toLowerCase();
-      const clerkUserId = String(body.clerkUserId || body.uid || '').trim();
-      const appId = String(body.appId || 'app_3K079yMcSqTmXUIq2teBpSaGXTu').trim();
-
-      if (!email || !clerkUserId) {
-        sendJson(res, 400, {
-          error: 'Missing Clerk user identity or email address.',
-        });
+      if (!clerkUserId || !email) {
+        sendJson(res, 400, { error: 'Missing Clerk user ID or email.' });
         return true;
       }
 
       const csrfToken = crypto.randomBytes(24).toString('hex');
-      const sessionPayload: SessionPayload = {
-        uid: clerkUserId,
+      const sessionPayload: ClerkSessionPayload = {
+        sub: clerkUserId,
+        appId: CLERK_APP_ID,
         email,
+        firstName,
+        lastName,
+        fullName,
+        imageUrl,
         csrfToken,
-        exp: Date.now() + 8 * 60 * 60 * 1000,
+        exp: Date.now() + 7 * 24 * 60 * 60 * 1000,
       };
-      const signedCookie = signSessionToken(sessionPayload);
+      const sessionToken = signClerkSessionToken(sessionPayload);
 
       const store = loadServerStore();
       store.auditLogs.unshift({
         id: `log-${Date.now()}`,
         adminEmail: email,
         adminUid: clerkUserId,
-        action: 'Owner Login (Clerk Auth)',
-        target: `Clerk Session (${appId})`,
-        details: `Authenticated via Clerk (${email})`,
+        action: 'Admin Sign In',
+        target: 'Admin Portal',
+        details: `Authenticated admin session for ${fullName} (${email})`,
         createdAt: new Date().toISOString(),
       });
       saveServerStore(store);
@@ -475,33 +455,42 @@ ${urlsXml}
         200,
         {
           authenticated: true,
-          admin: { uid: clerkUserId, email, authMode: 'clerk' },
+          user: formatPublicClerkUser({
+            id: clerkUserId,
+            appId: CLERK_APP_ID,
+            email,
+            firstName,
+            lastName,
+            fullName,
+            imageUrl,
+          }),
           csrfToken,
-          sessionToken: signedCookie,
+          sessionToken,
+          clerkAppId: CLERK_APP_ID,
         },
         {
           'Set-Cookie': [
-            `cai_admin_session=${encodeURIComponent(signedCookie)}; HttpOnly; Path=/; Max-Age=28800; SameSite=Lax`,
+            `__clerk_cai_session=${encodeURIComponent(sessionToken)}; HttpOnly; Path=/; Max-Age=604800; SameSite=Lax`,
           ],
         }
       );
       return true;
     } catch (e: any) {
-      sendJson(res, 400, { error: e.message || 'Failed to synchronize Clerk owner session' });
+      sendJson(res, 400, { error: e.message || 'Failed to sync Clerk session.' });
       return true;
     }
   }
 
-  // Admin Logout
-  if (pathname === '/api/admin/auth/logout' && method === 'POST') {
+  // 3. POST /api/clerk/signout — Sign out of Admin session
+  if (pathname === '/api/clerk/signout' && method === 'POST') {
     if (currentSession) {
       const store = loadServerStore();
       store.auditLogs.unshift({
         id: `log-${Date.now()}`,
         adminEmail: currentSession.email,
-        adminUid: currentSession.uid,
-        action: 'Admin Logout',
-        target: 'Admin Session Terminated',
+        adminUid: currentSession.sub,
+        action: 'Admin Sign Out',
+        target: 'Admin Portal',
         createdAt: new Date().toISOString(),
       });
       saveServerStore(store);
@@ -512,14 +501,14 @@ ${urlsXml}
       { success: true },
       {
         'Set-Cookie': [
-          'cai_admin_session=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax',
+          '__clerk_cai_session=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax',
         ],
       }
     );
     return true;
   }
 
-  // Public Bootstrap Read (Returns published posts, enabled categories, settings, and full data if admin)
+  // Public Bootstrap Read (Returns published posts, enabled categories, settings, and full data if signed in via Clerk)
   if (pathname === '/api/cms/bootstrap' && method === 'GET') {
     const store = loadServerStore();
     if (currentSession) {
@@ -568,14 +557,14 @@ ${urlsXml}
       const honeypot = String(body.website_hp || '').trim();
 
       if (honeypot) {
-        // Silent spam rejection
         sendJson(res, 200, { success: true });
         return true;
       }
 
       if (name.length < 2 || !email.includes('@') || subject.length < 3 || message.length < 10) {
         sendJson(res, 400, {
-          error: 'Please fill in a valid name, email address, subject, and message (at least 10 characters).',
+          error:
+            'Please fill in a valid name, email address, subject, and message (at least 10 characters).',
         });
         return true;
       }
@@ -601,7 +590,10 @@ ${urlsXml}
   }
 
   // Public Anonymous Analytics Event
-  if ((pathname === '/api/public/analytics' || pathname === '/api/analytics/track') && method === 'POST') {
+  if (
+    (pathname === '/api/public/analytics' || pathname === '/api/analytics/track') &&
+    method === 'POST'
+  ) {
     try {
       const body = await readJsonBody(req);
       const eventType = String(body.eventType || '').trim();
@@ -631,10 +623,10 @@ ${urlsXml}
     }
   }
 
-  // Protected Admin CMS Mutation Endpoint (/api/cms/sync)
+  // Protected CMS Mutation Endpoint (/api/cms/sync)
   if (pathname === '/api/cms/sync' && method === 'POST') {
     if (!currentSession) {
-      sendJson(res, 401, { error: 'Unauthorized: Valid administrator session required.' });
+      sendJson(res, 401, { error: 'Unauthorized: Valid admin session required.' });
       return true;
     }
     const csrfHeader = req.headers['x-csrf-token'];

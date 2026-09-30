@@ -83,6 +83,16 @@ export const SEOHead: React.FC<SEOHeadProps> = ({
       document.head.appendChild(canonicalEl);
     }
     canonicalEl.setAttribute('href', currentUrl);
+
+    let sitemapEl = document.querySelector('link[rel="sitemap"]') as HTMLLinkElement | null;
+    if (!sitemapEl) {
+      sitemapEl = document.createElement('link');
+      sitemapEl.setAttribute('rel', 'sitemap');
+      sitemapEl.setAttribute('type', 'application/xml');
+      sitemapEl.setAttribute('title', 'Sitemap');
+      document.head.appendChild(sitemapEl);
+    }
+    sitemapEl.setAttribute('href', '/sitemap.xml');
   }, [fullTitle, metaDesc, ogType, currentUrl, ogImage, noIndex, preferredOrigin, settings.siteName]);
 
   if (!structuredData) return null;

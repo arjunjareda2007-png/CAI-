@@ -1,185 +1,108 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Eye, EyeOff, Lock, ShieldCheck, AlertCircle, ArrowLeft, CheckCircle2 } from 'lucide-react';
+import { SignIn, SignUp, Show, UserButton, useAuth } from '@clerk/react';
+import { ArrowLeft, CheckCircle2 } from 'lucide-react';
 import { useCMS } from '../../context/CMSContext';
-import {
-  ClerkOwnerAuthControls,
-  useClerkRuntime,
-  CLERK_APP_ID,
-} from '../../context/ClerkProviderWrapper';
 import { SEOHead } from '../../components/SEOHead';
 import { BrandLogo } from '../../components/BrandLogo';
 
-const OWNER_EMAIL = 'arjunjareda2007@gmail.com';
-
 export const AdminLoginPage: React.FC = () => {
-  const { adminUser, loginWithCredentials } = useCMS();
-  const { isClerkConfigured, isClerkSignedIn } = useClerkRuntime();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const { adminUser } = useCMS();
+  const { isLoaded, isSignedIn } = useAuth();
   const navigate = useNavigate();
+  const [authMode, setAuthMode] = useState<'sign-in' | 'sign-up'>('sign-in');
 
   useEffect(() => {
-    if (adminUser) {
+    if (isLoaded && (isSignedIn || adminUser)) {
       navigate('/8233538355', { replace: true });
     }
-  }, [adminUser, navigate]);
-
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorMsg(null);
-    const cleanEmail = email.trim().toLowerCase();
-    if (!cleanEmail || !cleanEmail.includes('@')) {
-      setErrorMsg('Please enter a valid owner email address.');
-      return;
-    }
-    if (cleanEmail !== OWNER_EMAIL) {
-      setErrorMsg('Access denied. This portal is restricted exclusively to the verified site owner.');
-      return;
-    }
-    setLoading(true);
-    const res = await loginWithCredentials(cleanEmail, password);
-    setLoading(false);
-    if (res.ok) {
-      navigate('/8233538355', { replace: true });
-    } else {
-      setErrorMsg(res.error || 'Invalid owner credentials.');
-    }
-  };
+  }, [isLoaded, isSignedIn, adminUser, navigate]);
 
   return (
-    <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-[#F6F8FB] flex flex-col justify-center py-8 sm:py-12 px-4 sm:px-6">
-      <SEOHead title="Owner Authentication Portal" canonicalPath="/8233538355/login" noIndex />
+    <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-[#F6F8FB] flex flex-col justify-between py-8 sm:py-12 px-4 sm:px-6">
+      <SEOHead title="Admin Portal Authentication" canonicalPath="/8233538355/login" noIndex />
 
-      <div className="w-full max-w-md mx-auto animate-fade-in-up">
+      <div className="w-full max-w-md mx-auto my-auto animate-fade-in-up">
+        {/* Subtle Tricolour Strip */}
         <div className="h-1 w-24 mx-auto flex mb-5 rounded overflow-hidden">
           <div className="w-1/3 bg-[#FF7A00]" />
           <div className="w-1/3 bg-white border-y border-slate-200" />
           <div className="w-1/3 bg-[#138A36]" />
         </div>
 
+        {/* Brand Identity Header */}
         <div className="flex flex-col items-center justify-center text-center">
           <div className="bg-white border border-[#E2E8F0] rounded-2xl px-5 py-3 shadow-xs mb-3">
             <BrandLogo variant="header" size="md" theme="light" />
           </div>
-          <p className="text-xs font-bold uppercase tracking-widest text-[#071A3D] mt-1">
-            Restricted Owner Security Portal
-          </p>
-          <p className="text-[11px] text-[#64748B] mt-0.5">
-            Secured via Clerk Authentication ({CLERK_APP_ID}) &amp; Owner Session Guard
-          </p>
+          <h1 className="text-xs font-bold uppercase tracking-widest text-[#071A3D] mt-1">
+            Admin Command Center Authentication
+          </h1>
         </div>
 
-        <div className="mt-6 bg-white py-6 sm:py-8 px-5 sm:px-8 shadow-sm rounded-xl border border-[#E2E8F0] space-y-5">
-          {errorMsg && (
-            <div className="p-3.5 rounded-lg bg-red-50 border border-red-300 flex items-start gap-2.5 text-xs text-red-900">
-              <AlertCircle className="w-4 h-4 text-[#DC2626] shrink-0 mt-0.5" />
-              <span className="break-words">{errorMsg}</span>
-            </div>
-          )}
-
-          {/* Clerk Authentication Controls (SignInButton, SignUpButton, UserButton) */}
-          <div className="space-y-4">
-            <ClerkOwnerAuthControls redirectUrl="/8233538355" showEmbeddedSignIn />
-
-            {(isClerkSignedIn || adminUser) && (
-              <div className="p-3.5 rounded-lg bg-emerald-50 border border-emerald-200 flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2 text-xs font-semibold text-[#138A36]">
-                  <CheckCircle2 className="w-4 h-4 shrink-0" />
-                  <span>Clerk session verified. Entering Owner Command Center...</span>
-                </div>
-                <Link
-                  to="/8233538355"
-                  className="px-3 py-1.5 rounded bg-[#071A3D] text-white text-xs font-semibold whitespace-nowrap"
-                >
-                  Open Dashboard
-                </Link>
-              </div>
-            )}
-
-            <div className="flex items-center gap-3">
-              <div className="h-px bg-[#E2E8F0] flex-1" />
-              <span className="text-[11px] font-semibold uppercase text-[#64748B] whitespace-nowrap">
-                Or Direct Owner Key Login
-              </span>
-              <div className="h-px bg-[#E2E8F0] flex-1" />
-            </div>
-          </div>
-
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div>
-              <label
-                htmlFor="admin-email"
-                className="block text-xs font-semibold text-[#071A3D] mb-1"
-              >
-                Verified Owner Email
-              </label>
-              <input
-                id="admin-email"
-                type="email"
-                required
-                autoComplete="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="Enter owner email address"
-                className="w-full px-3.5 py-2.5 rounded-md border border-[#E2E8F0] text-sm text-[#071A3D] focus:outline-none focus:border-[#071A3D] transition-colors"
-              />
-            </div>
-
-            <div>
-              <label
-                htmlFor="admin-password"
-                className="block text-xs font-semibold text-[#071A3D] mb-1"
-              >
-                Owner Password
-              </label>
-              <div className="relative">
-                <input
-                  id="admin-password"
-                  type={showPassword ? 'text' : 'password'}
-                  required
-                  autoComplete="current-password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter owner password"
-                  className="w-full pl-3.5 pr-10 py-2.5 rounded-md border border-[#E2E8F0] text-sm text-[#071A3D] focus:outline-none focus:border-[#071A3D] transition-colors"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((prev) => !prev)}
-                  aria-label={showPassword ? 'Hide password' : 'Show password'}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#64748B] hover:text-[#071A3D] cursor-pointer"
-                >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-
+        {/* Mode Switcher Tabs: Sign In / Sign Up */}
+        <Show when="signed-out">
+          <div className="mt-6 grid grid-cols-2 gap-1.5 p-1 bg-white rounded-xl border border-[#E2E8F0] shadow-2xs">
             <button
-              type="submit"
-              disabled={loading}
-              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-md bg-[#071A3D] hover:bg-[#0D2758] disabled:opacity-60 text-white text-sm font-semibold transition-all btn-press cursor-pointer"
+              type="button"
+              onClick={() => setAuthMode('sign-in')}
+              className={`py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                authMode === 'sign-in'
+                  ? 'bg-[#071A3D] text-white shadow-xs'
+                  : 'text-[#64748B] hover:text-[#071A3D]'
+              }`}
             >
-              <Lock className="w-4 h-4 text-[#FF7A00] shrink-0" />
-              <span>{loading ? 'Verifying Owner Identity...' : 'Authenticate Owner Session'}</span>
+              Sign In
             </button>
-          </form>
-
-          <div className="p-3.5 rounded-lg bg-[#F6F8FB] border border-[#E2E8F0] text-xs text-[#64748B] space-y-1.5">
-            <div className="flex items-center gap-1.5 font-semibold text-[#071A3D]">
-              <ShieldCheck className="w-4 h-4 text-[#138A36] shrink-0" />
-              <span>Clerk + HTTP-Only Session Protected Access</span>
-            </div>
-            <p className="text-[11px] leading-relaxed">
-              Protected by Clerk Authentication ({CLERK_APP_ID}), HTTP-only signed session tokens, and brute-force rate limiting.
-            </p>
+            <button
+              type="button"
+              onClick={() => setAuthMode('sign-up')}
+              className={`py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                authMode === 'sign-up'
+                  ? 'bg-[#FF7A00] text-white shadow-xs'
+                  : 'text-[#64748B] hover:text-[#071A3D]'
+              }`}
+            >
+              Sign Up
+            </button>
           </div>
-        </div>
 
-        <div className="mt-5 text-center">
+          <div className="mt-4 flex justify-center">
+            {authMode === 'sign-in' ? (
+              <SignIn
+                routing="hash"
+                forceRedirectUrl="/8233538355"
+                fallbackRedirectUrl="/8233538355"
+              />
+            ) : (
+              <SignUp
+                routing="hash"
+                forceRedirectUrl="/8233538355"
+                fallbackRedirectUrl="/8233538355"
+              />
+            )}
+          </div>
+        </Show>
+
+        <Show when="signed-in">
+          <div className="mt-6 bg-white py-6 px-6 shadow-sm rounded-xl border border-[#E2E8F0] space-y-4">
+            <div className="p-3.5 rounded-lg bg-emerald-50 border border-emerald-200 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5 text-xs font-semibold text-[#138A36]">
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                <span>Authenticated. Redirecting...</span>
+              </div>
+              <UserButton />
+            </div>
+            <Link
+              to="/8233538355"
+              className="w-full inline-flex items-center justify-center py-2.5 px-4 rounded-md bg-[#071A3D] hover:bg-[#0D2758] text-white text-xs font-semibold transition-colors"
+            >
+              Open Admin Dashboard
+            </Link>
+          </div>
+        </Show>
+
+        <div className="mt-5 text-center space-y-3">
           <Link
             to="/"
             className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#64748B] hover:text-[#071A3D] transition-colors"

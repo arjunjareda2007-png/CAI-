@@ -31,10 +31,7 @@ import {
   Save,
 } from 'lucide-react';
 import { useCMS } from '../../context/CMSContext';
-import {
-  ClerkOwnerUserBadge,
-  useClerkRuntime,
-} from '../../context/ClerkProviderWrapper';
+import { Show, SignInButton, SignUpButton, UserButton } from '@clerk/react';
 import {
   Post,
   PostCategorySlug,
@@ -66,8 +63,6 @@ type AdminTab =
   | 'audit'
   | 'backup';
 
-const OWNER_EMAIL = 'arjunjareda2007@gmail.com';
-
 export const AdminDashboardPage: React.FC = () => {
   const {
     posts,
@@ -97,7 +92,6 @@ export const AdminDashboardPage: React.FC = () => {
   } = useCMS();
 
   const navigate = useNavigate();
-  const { signOutClerk } = useClerkRuntime();
   const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<AdminTab>(() => {
     const qTab = searchParams.get('tab') as AdminTab | null;
@@ -527,14 +521,17 @@ export const AdminDashboardPage: React.FC = () => {
               <ExternalLink className="w-3.5 h-3.5 shrink-0" />
             </Link>
 
-            <ClerkOwnerUserBadge />
+            <Show when="signed-out">
+              <SignInButton mode="modal" />
+              <SignUpButton mode="modal" />
+            </Show>
+            <Show when="signed-in">
+              <UserButton />
+            </Show>
 
             <button
               type="button"
               onClick={async () => {
-                if (signOutClerk) {
-                  await signOutClerk();
-                }
                 await logoutAdmin();
                 navigate('/8233538355/login');
               }}

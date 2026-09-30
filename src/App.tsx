@@ -5,8 +5,8 @@
 
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { AuthenticateWithRedirectCallback } from '@clerk/react';
 import { CMSProvider } from './context/CMSContext';
-import { ClerkProviderWrapper } from './context/ClerkProviderWrapper';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { PublicLayout } from './components/PublicLayout';
 import { HomePage } from './pages/HomePage';
@@ -29,9 +29,14 @@ export default function App() {
   return (
     <ErrorBoundary>
       <CMSProvider>
-        <ClerkProviderWrapper>
-          <BrowserRouter>
-            <Routes>
+        <BrowserRouter>
+          <Routes>
+            {/* Clerk OAuth & SSO Callback Routes */}
+            <Route path="/sso-callback" element={<AuthenticateWithRedirectCallback />} />
+            <Route path="/auth/callback" element={<AuthenticateWithRedirectCallback />} />
+            <Route path="/callback" element={<AuthenticateWithRedirectCallback />} />
+            <Route path="/8233538355/callback" element={<AuthenticateWithRedirectCallback />} />
+
           {/* Hidden Secured Owner Portal Routes (/8233538355 and /caiowner, unlinked from public UI) */}
           <Route path="/8233538355" element={<AdminDashboardPage />} />
           <Route path="/8233538355/login" element={<AdminLoginPage />} />
@@ -230,8 +235,7 @@ export default function App() {
             }
           />
             </Routes>
-          </BrowserRouter>
-        </ClerkProviderWrapper>
+        </BrowserRouter>
       </CMSProvider>
     </ErrorBoundary>
   );

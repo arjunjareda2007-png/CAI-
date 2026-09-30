@@ -119,14 +119,16 @@ export const DirectoryPage: React.FC<DirectoryPageProps> = ({ section = 'latest'
   const [stateFilter, setStateFilter] = useState<string>('all');
   const [qualificationFilter, setQualificationFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [sortBy, setSortBy] = useState<'newest' | 'deadline'>('newest');
+  const [sortBy, setSortBy] = useState<'newest' | 'deadline' | 'vacancies'>('newest');
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
   const [visibleCount, setVisibleCount] = useState(10);
 
   useEffect(() => {
     const qParam = searchParams.get('q');
     const catParam = searchParams.get('category');
+    const orgParam = searchParams.get('org');
     if (qParam !== null) setKeyword(qParam);
+    if (orgParam !== null) setOrgFilter(orgParam);
     if (catParam !== null) {
       setCategoryFilter(catParam);
     } else if (section !== 'latest' && section !== 'search') {
@@ -151,7 +153,11 @@ export const DirectoryPage: React.FC<DirectoryPageProps> = ({ section = 'latest'
       if (categoryFilter !== 'all' && post.category !== categoryFilter) {
         return false;
       }
-      if (orgFilter !== 'all' && post.organization.toLowerCase() !== orgFilter.toLowerCase()) {
+      if (
+        orgFilter !== 'all' &&
+        post.organization.toLowerCase() !== orgFilter.toLowerCase() &&
+        !(post.tags && post.tags.some((t) => t.toLowerCase().includes(orgFilter.toLowerCase())))
+      ) {
         return false;
       }
       if (stateFilter !== 'all' && post.state.toLowerCase() !== stateFilter.toLowerCase()) {
@@ -197,6 +203,9 @@ export const DirectoryPage: React.FC<DirectoryPageProps> = ({ section = 'latest'
     });
 
     return list.sort((a, b) => {
+      if (sortBy === 'vacancies') {
+        return (b.totalVacancies || 0) - (a.totalVacancies || 0);
+      }
       if (sortBy === 'deadline') {
         const da = parseDeadlineToMs(a.applicationEnd);
         const db = parseDeadlineToMs(b.applicationEnd);
@@ -352,11 +361,12 @@ export const DirectoryPage: React.FC<DirectoryPageProps> = ({ section = 'latest'
         <label className="block text-xs font-semibold text-[#071A3D] mb-1.5">Sort Order</label>
         <select
           value={sortBy}
-          onChange={(e) => setSortBy(e.target.value as 'newest' | 'deadline')}
+          onChange={(e) => setSortBy(e.target.value as 'newest' | 'deadline' | 'vacancies')}
           className="w-full px-3 py-2 text-xs bg-[#F6F8FB] border border-[#E2E8F0] rounded-md text-[#071A3D] focus:outline-none focus:border-[#071A3D]"
         >
           <option value="newest">Newest Published First</option>
           <option value="deadline">Nearest Application Deadline</option>
+          <option value="vacancies">Highest Vacancies First</option>
         </select>
       </div>
 
@@ -467,11 +477,21 @@ export const DirectoryPage: React.FC<DirectoryPageProps> = ({ section = 'latest'
                 <button
                   type="button"
                   onClick={() => setSortBy('deadline')}
-                  className={`font-semibold ${
+                  className={`font-semibold cursor-pointer ${
                     sortBy === 'deadline' ? 'text-[#071A3D] underline' : 'hover:text-[#071A3D]'
                   }`}
                 >
                   By Deadline
+                </button>
+                <span>·</span>
+                <button
+                  type="button"
+                  onClick={() => setSortBy('vacancies')}
+                  className={`font-semibold cursor-pointer ${
+                    sortBy === 'vacancies' ? 'text-[#071A3D] underline' : 'hover:text-[#071A3D]'
+                  }`}
+                >
+                  Most Vacancies
                 </button>
               </div>
             </div>
